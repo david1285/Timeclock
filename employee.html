@@ -206,465 +206,29 @@ body { font-family: 'DM Sans', sans-serif; background: #0f0f11; color: #e2e2e8; 
 <div id="modalContainer"></div>
 </div><!-- /appShell -->
 
-<script type="module">
-import { initializeApp }                          from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-import { getFirestore, collection, doc,
-         onSnapshot, setDoc, updateDoc,
-         deleteDoc, addDoc, query,
-         orderBy, serverTimestamp }               from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
-// ── Firebase config ───────────────────────────────────────────────────
-const firebaseConfig = {
-  apiKey:            "AIzaSyBNorf5AU_cS-0N_M2C5DMgRHesrd6Yh5s",
-  authDomain:        "employee-timeclock-fca3a.firebaseapp.com",
-  projectId:         "employee-timeclock-fca3a",
-  storageBucket:     "employee-timeclock-fca3a.firebasestorage.app",
-  messagingSenderId: "1008260914486",
-  appId:             "1:1008260914486:web:92e113e41a88cccd822797"
-};
-
-const app = initializeApp(firebaseConfig);
-const db  = getFirestore(app);
-
-// ── Collections ───────────────────────────────────────────────────────
-const empCol  = collection(db, 'employees');
-const jobCol  = collection(db, 'jobs');
-const logCol  = collection(db, 'jobLog');
-const attCol  = collection(db, 'attendanceLog');
-
-// ── In-memory state (populated by Firestore listeners) ────────────────
-let employees     = [];
-let jobs          = [];
-let logEntries    = [];
-let attendanceLog = [];
-
-// Active timers live only in memory (per-device, intentional)
-// attendanceTimers track who is currently clocked in on THIS device
-// We store attendance clock-in time in Firestore so other devices can see it
-let activeTimers     = {}; // { jobId: { start } }
-let attendanceTimers = {}; // { empId: { start } } — mirrors 'activeAttendance' collection
-
-const activeAttCol = collection(db, 'activeAttendance'); // live clock-in states
-
-let currentEditJob = null, currentEditEmployee = null, pendingEmpId = null;
-let dbReady = 0; // count of listeners that have fired at least once
-
-function checkReady() {
-  dbReady++;
-  if (dbReady >= 4) {
-    document.getElementById('loadingOverlay').style.display = 'none';
-    document.getElementById('syncDot').classList.remove('offline');
-    renderBoard();
-    renderStats();
-  }
-}
-
-// ── Firestore listeners (real-time) ───────────────────────────────────
-onSnapshot(empCol, snap => {
-  employees = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  employees.sort((a,b) => (a.name||'').localeCompare(b.name||''));
-  checkReady(); renderBoard(); renderStats();
-});
-
-onSnapshot(query(jobCol), snap => {
-  jobs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  checkReady(); renderBoard(); renderStats();
-});
-
-onSnapshot(query(logCol, orderBy('start','desc')), snap => {
-  logEntries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  checkReady(); renderBoard(); renderStats();
-});
-
-onSnapshot(query(attCol, orderBy('start','desc')), snap => {
-  attendanceLog = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  checkReady(); renderBoard(); renderStats();
-});
-
-// Live attendance clock-in states (who is currently clocked in)
-onSnapshot(activeAttCol, snap => {
-  attendanceTimers = {};
-  snap.docs.forEach(d => {
-    attendanceTimers[d.id] = d.data(); // empId -> { start }
-  });
-  renderBoard(); renderStats();
-});
-
-// ── Write helpers ─────────────────────────────────────────────────────
-async function saveEmployee(emp) {
-  const { id, ...data } = emp;
-  await setDoc(doc(db, 'employees', id), data);
-}
-async function saveJob(job) {
-  const { id, ...data } = job;
-  await setDoc(doc(db, 'jobs', id), data);
-}
-async function saveLogEntry(entry) {
-  const { id, ...data } = entry;
-  await setDoc(doc(db, 'jobLog', id), data);
-}
-async function saveAttEntry(entry) {
-  const { id, ...data } = entry;
-  await setDoc(doc(db, 'attendanceLog', id), data);
-}
-async function deleteEmployee(empId) {
-  const emp  = employees.find(e => e.id === empId);
-  const empJobs = jobs.filter(j => j.empId === empId);
-  const msg  = empJobs.length > 0
-    ? `Delete ${emp.name}? This will also delete their ${empJobs.length} job(s).`
-    : `Delete ${emp.name}?`;
-  if (!confirm(msg)) return;
-  empJobs.forEach(j => { if (activeTimers[j.id]) delete activeTimers[j.id]; });
-  await Promise.all([
-    deleteDoc(doc(db,'employees',empId)),
-    ...empJobs.map(j => deleteDoc(doc(db,'jobs',j.id)))
-  ]);
-}
-async function deleteJob(jobId) {
-  if (activeTimers[jobId]) delete activeTimers[jobId];
-  await deleteDoc(doc(db,'jobs',jobId));
-}
-async function deleteLogEntry(id) { await deleteDoc(doc(db,'jobLog',id)); }
-async function deleteAttEntry(id) { await deleteDoc(doc(db,'attendanceLog',id)); }
-
-// Expose to global for onclick handlers
-window.deleteEmployee = deleteEmployee;
-window.deleteJob      = deleteJob;
-window.deleteLogEntry = deleteLogEntry;
-
-// ── Time helpers ──────────────────────────────────────────────────────
-function formatDur(ms) {
-  const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=s%60;
-  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sc).padStart(2,'0')}`;
-}
-function durHours(ms) { return (ms/3600000).toFixed(2); }
-function fmtTime(ts)  { return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
-function fmtDate(ts)  { return new Date(ts).toLocaleDateString([],{month:'short',day:'numeric'}); }
-function fmtDateTime(ts) { return `${fmtDate(ts)} ${fmtTime(ts)}`; }
-function isToday(ts)  { const d=new Date(ts),n=new Date(); return d.getFullYear()===n.getFullYear()&&d.getMonth()===n.getMonth()&&d.getDate()===n.getDate(); }
-function getWeekStart() {
-  const now=new Date(), d=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  d.setDate(d.getDate()-d.getDay()); return d.getTime();
-}
-function isThisWeek(ts) { return ts >= getWeekStart(); }
-
-// ── Attendance ────────────────────────────────────────────────────────
-window.attendanceIn = async function(empId) {
-  if (attendanceTimers[empId]) return;
-  await setDoc(doc(db,'activeAttendance',empId), { start: Date.now() });
-};
-
-window.attendanceOut = async function(empId) {
-  if (!attendanceTimers[empId]) return;
-  const empJobs   = jobs.filter(j => j.empId === empId);
-  const runningJob = empJobs.find(j => activeTimers[j.id]);
-  if (runningJob) {
-    document.getElementById('modalContainer').innerHTML = `
-      <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
-        <div class="modal"><h3 style="color:#f87171;">Cannot Clock Out</h3>
-          <p style="font-size:14px;color:#9494aa;line-height:1.6;margin-bottom:20px;">
-            You must clock out of <strong style="color:#e2e2e8;">${runningJob.title}</strong> before clocking out for attendance.</p>
-          <div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">OK, go back</button></div>
-        </div></div>`;
-    return;
-  }
-  const start = attendanceTimers[empId].start;
-  const end   = Date.now();
-  const emp   = employees.find(e => e.id === empId);
-  const entry = { empId, empName: emp?emp.name:'—', start, end, duration: end-start };
-  await Promise.all([
-    saveAttEntry({ id:'a'+Date.now(), ...entry }),
-    deleteDoc(doc(db,'activeAttendance',empId))
-  ]);
-};
-
-// ── Job punch ─────────────────────────────────────────────────────────
-window.punchIn = async function(jobId) {
-  if (activeTimers[jobId]) return;
-  const job = jobs.find(j => j.id === jobId);
-  if (job && !attendanceTimers[job.empId]) {
-    const emp = employees.find(e => e.id === job.empId);
-    document.getElementById('modalContainer').innerHTML = `
-      <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
-        <div class="modal"><h3 style="color:#f0aa55;">Attendance Required</h3>
-          <p style="font-size:14px;color:#9494aa;line-height:1.6;margin-bottom:20px;">
-            <strong style="color:#e2e2e8;">${emp?emp.name:'This employee'}</strong> must clock in for attendance before starting a job.</p>
-          <div class="modal-actions">
-            <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-            <button class="btn btn-primary" onclick="closeModal();attendanceIn('${job.empId}').then(()=>punchIn('${jobId}'))">Clock In for Attendance &amp; Job</button>
-          </div></div></div>`;
-    return;
-  }
-  activeTimers[jobId] = { start: Date.now() };
-  renderBoard(); renderStats();
-};
-
-window.punchOut = function(jobId) {
-  if (!activeTimers[jobId]) return;
-  const job     = jobs.find(j => j.id === jobId);
-  const elapsed = formatDur(Date.now() - activeTimers[jobId].start);
-  document.getElementById('modalContainer').innerHTML = `
-    <div class="modal-overlay">
-      <div class="modal modal-wide">
-        <h3 style="display:flex;align-items:center;gap:10px;">Clock Out
-          <span style="font-size:11px;font-weight:400;color:#555568;font-family:'DM Mono',monospace;">${job?job.title:''}</span></h3>
-        <div style="background:#13131a;border:1px solid #222230;border-radius:8px;padding:10px 14px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;">
-          <span style="font-size:12px;color:#666680;">Session time</span>
-          <span style="font-family:'DM Mono',monospace;font-size:20px;color:#5aba8d;" id="clockOutTimer">${elapsed}</span>
-        </div>
-        <div class="form-group">
-          <label class="form-label">WORK NOTES <span style="color:#e87d5a;">*</span></label>
-          <textarea class="form-textarea" id="punchOutNotes" rows="3" placeholder="Describe what you worked on…"></textarea>
-          <div class="notes-required-hint" id="notesHint">⚠ Work notes are required before clocking out.</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">MATERIALS USED <span style="color:#e87d5a;">*</span></label>
-          <textarea class="form-textarea" id="punchOutMaterials" rows="3" placeholder="List materials used… Enter &quot;None&quot; if none."></textarea>
-          <div class="notes-required-hint" id="materialsHint">⚠ Materials used are required. Enter "None" if none.</div>
-        </div>
-        <div class="modal-actions">
-          <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-          <button class="btn" style="background:#5aba8d;color:#0f0f11;font-weight:600;" onclick="confirmPunchOut('${jobId}')">⬛ Confirm Clock Out</button>
-        </div>
-      </div>
-    </div>`;
-  const timerEl=document.getElementById('clockOutTimer');
-  const tick=setInterval(()=>{if(!document.getElementById('clockOutTimer')){clearInterval(tick);return;}timerEl.textContent=formatDur(Date.now()-activeTimers[jobId].start);},1000);
-};
-
-window.confirmPunchOut = async function(jobId) {
-  const notesEl=document.getElementById('punchOutNotes'), matEl=document.getElementById('punchOutMaterials');
-  const notes=notesEl.value.trim(), materials=matEl.value.trim();
-  let valid=true;
-  if(!notes){notesEl.classList.add('error');document.getElementById('notesHint').classList.add('visible');if(valid)notesEl.focus();valid=false;}
-  if(!materials){matEl.classList.add('error');document.getElementById('materialsHint').classList.add('visible');if(valid)matEl.focus();valid=false;}
-  if(!valid||!activeTimers[jobId]){if(!activeTimers[jobId])closeModal();return;}
-  const start=activeTimers[jobId].start, end=Date.now();
-  const job=jobs.find(j=>j.id===jobId), emp=job?employees.find(e=>e.id===job.empId):null;
-  const entry = { id:'l'+Date.now(), jobId, jobTitle:job?job.title:'—', empName:emp?emp.name:'—', start, end, duration:end-start, workNotes:notes, materials };
-  delete activeTimers[jobId];
-  closeModal();
-  await saveLogEntry(entry);
-  renderBoard(); renderStats();
-};
-
-window.cancelPunchOut = () => closeModal();
-
-// ── Stats ─────────────────────────────────────────────────────────────
-function renderStats() {
-  let todayMs=0, weekMs=0;
-  logEntries.forEach(e => {
-    if(isToday(e.start))    todayMs+=e.duration;
-    if(isThisWeek(e.start)) weekMs +=e.duration;
-  });
-  Object.entries(activeTimers).forEach(([,t]) => {
-    const el=Date.now()-t.start;
-    if(isToday(t.start))    todayMs+=el;
-    if(isThisWeek(t.start)) weekMs +=el;
-  });
-  document.getElementById('statToday').textContent  = durHours(todayMs)+'h';
-  document.getElementById('statWeek').textContent   = durHours(weekMs)+'h';
-  document.getElementById('statActive').textContent = Object.keys(activeTimers).length;
-  document.getElementById('statAttActive').textContent = Object.keys(attendanceTimers).length;
-  document.getElementById('statEmps').textContent   = employees.length;
-}
-
-// ── Weekly helpers ────────────────────────────────────────────────────
-function weeklyJobHoursForEmp(empId) {
-  const ws = getWeekStart();
-  const empJs = jobs.filter(j => j.empId === empId);
-  let ms = empJs.reduce((sum,job) => sum + logEntries.filter(e=>e.jobId===job.id&&e.start>=ws).reduce((s,e)=>s+e.duration,0), 0);
-  empJs.forEach(job => { if(activeTimers[job.id]&&activeTimers[job.id].start>=ws) ms+=Date.now()-activeTimers[job.id].start; });
-  return ms;
-}
-function weeklyAttHoursForEmp(empId) {
-  const ws = getWeekStart();
-  let ms = attendanceLog.filter(a=>a.empId===empId&&a.start>=ws).reduce((s,a)=>s+a.duration,0);
-  if(attendanceTimers[empId]&&attendanceTimers[empId].start>=ws) ms+=Date.now()-attendanceTimers[empId].start;
-  return ms;
-}
-
-// ── Board render ──────────────────────────────────────────────────────
-function pillClass(p) { return{high:'pill-high',medium:'pill-medium',low:'pill-low'}[p]||'pill-low'; }
-function pillLabel(p) { return{high:'Urgent',medium:'Normal',low:'Low'}[p]||p; }
-function totalLoggedMs(jobId) { return logEntries.filter(e=>e.jobId===jobId).reduce((s,e)=>s+e.duration,0); }
-
-function renderBoard() {
-  const board = document.getElementById('board');
-  board.innerHTML = '';
-  employees.forEach(emp => {
-    const empJobs    = jobs.filter(j=>j.empId===emp.id);
-    const empLogMs   = empJobs.reduce((s,j)=>s+totalLoggedMs(j.id),0);
-    const empActMs   = empJobs.reduce((s,j)=>{if(activeTimers[j.id])s+=Date.now()-activeTimers[j.id].start;return s;},0);
-    const attRunning = !!attendanceTimers[emp.id];
-    const weekAttMs  = weeklyAttHoursForEmp(emp.id);
-    const hasRunningJob = empJobs.some(j=>activeTimers[j.id]);
-
-    const col = document.createElement('div');
-    col.className = 'kb-column';
-    col.innerHTML = `
-      <div class="col-header">
-        <div><div class="col-name">${emp.name}</div><div class="col-role">${emp.role}</div></div>
-        <div style="display:flex;align-items:center;gap:6px;">
-          <div class="col-count">${empJobs.length}</div>
-          <div class="col-hours">${durHours(empLogMs+empActMs)}h</div>
-          <button class="emp-btn" onclick="openEditEmployee('${emp.id}')" title="Edit">✎</button>
-          <button class="emp-btn emp-del" onclick="deleteEmployee('${emp.id}')" title="Delete">✕</button>
-        </div>
-      </div>
-      <div class="attendance-bar">
-        <div class="attendance-bar-inner">
-          <span class="attendance-label">Week Att.</span>
-          <div style="display:flex;align-items:center;gap:6px;flex:1;justify-content:center;">
-            <div class="att-dot ${attRunning?'att-running':''}"></div>
-            <span class="attendance-timer ${attRunning?'att-running':''}" id="att-timer-${emp.id}">${formatDur(weekAttMs)}</span>
-          </div>
-          ${attRunning
-            ? `<button class="btn-att-out ${hasRunningJob?'att-blocked':''}" onclick="attendanceOut('${emp.id}')" title="${hasRunningJob?'Clock out of job first':'Clock out for the day'}">⬛ Clock Out</button>`
-            : `<button class="btn-att-in" onclick="attendanceIn('${emp.id}')">▶ Clock In</button>`}
-        </div>
-      </div>
-      <div class="col-body" id="colbody-${emp.id}"></div>
-      <button class="col-add-btn" onclick="openAddJob('${emp.id}')">+ Add job</button>`;
-    board.appendChild(col);
-
-    const colBody = col.querySelector(`#colbody-${emp.id}`);
-    if (!empJobs.length) { colBody.innerHTML='<div class="empty-col">No jobs assigned</div>'; return; }
-
-    empJobs.forEach(job => {
-      const isRunning  = !!activeTimers[job.id];
-      const logMs      = totalLoggedMs(job.id);
-      const actMs      = isRunning ? Date.now()-activeTimers[job.id].start : 0;
-      const totalMs    = logMs+actMs;
-      const estMs      = (job.estHours||0)*3600000;
-      const isOver     = estMs>0&&totalMs>estMs;
-      const isHalf     = estMs>0&&!isOver&&totalMs>=estMs*0.5;
-      const sessions   = logEntries.filter(e=>e.jobId===job.id).length;
-      const lastEntry  = logEntries.find(e=>e.jobId===job.id);
-
-      const card = document.createElement('div');
-      let cls='task-card';
-      if(!attRunning) cls+=' locked';
-      if(isRunning)   cls+=' clocked-in';
-      if(isHalf)      cls+=' halfway';
-      if(isOver)      cls+=' over-budget';
-      card.className=cls;
-
-      card.innerHTML=`
-        <div class="card-title-row">
-          <div class="card-title">${job.title}</div>
-          <span class="priority-pill ${pillClass(job.priority)}">${pillLabel(job.priority)}</span>
-        </div>
-        ${(job.bullets||[]).length?`<ul class="card-bullets">${job.bullets.map(b=>`<li>${b}</li>`).join('')}</ul>`:''}
-        <div class="card-timer-section">
-          <div class="timer-row">
-            <div class="timer-display ${isRunning?'running':''}" id="timer-${job.id}">${isRunning?formatDur(Date.now()-activeTimers[job.id].start):formatDur(0)}</div>
-            <div class="pulse-dot ${isRunning?'running':''}"></div>
-          </div>
-          <div class="timer-meta ${isRunning?'running':''}">${isRunning?'Clocked in at '+fmtTime(activeTimers[job.id].start):(lastEntry?'Last: '+fmtDateTime(lastEntry.start):'Not started')}</div>
-          ${sessions>0?`<div style="margin-top:5px;color:#7b6ef6;font-size:11px;font-family:'DM Mono',monospace;">Total: ${durHours(logMs)}h · ${sessions} session${sessions===1?'':'s'}</div>`:''}
-        </div>
-        <div class="card-footer">
-          <div class="card-meta-row"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="opacity:.6;flex-shrink:0"><circle cx="8" cy="8" r="6.5" stroke="#9494aa" stroke-width="1.4"/><path d="M8 5v3.5l2 2" stroke="#9494aa" stroke-width="1.4" stroke-linecap="round"/></svg>
-            <span class="meta-label">Job ID:</span><span class="meta-val" style="font-family:'DM Mono',monospace;font-size:11px;">${job.jobCode||'—'}</span></div>
-          ${job.estHours?`<div class="card-meta-row"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="opacity:.6;flex-shrink:0"><path d="M3 1v14M3 2h9l-2.5 4L12 10H3" stroke="#9494aa" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span class="meta-label">Est.:</span><span class="meta-val" style="${isOver?'color:#e87d5a':''}">${job.estHours}h${isOver?' ⚠ over':(!isOver&&totalMs>0?' ('+Math.round(totalMs/estMs*100)+'%)':'')}</span></div>`:''}
-          <div class="card-actions">
-            ${isRunning?`<button class="btn-punch-out" onclick="punchOut('${job.id}')">⬛ Clock Out</button>`:`<button class="btn-punch-in" onclick="punchIn('${job.id}')">▶ Clock In</button>`}
-            <button class="card-btn" onclick="openEditJob('${job.id}')">Edit</button>
-            <button class="card-btn del" onclick="deleteJob('${job.id}')">Delete</button>
-          </div>
-        </div>`;
-      colBody.appendChild(card);
-    });
-  });
-
-  const addColBtn=document.createElement('button');
-  addColBtn.className='add-col-btn'; addColBtn.innerHTML='+'; addColBtn.onclick=()=>openAddEmployee();
-  board.appendChild(addColBtn);
-}
-
-// ── Live ticker ───────────────────────────────────────────────────────
-setInterval(() => {
-  Object.entries(activeTimers).forEach(([id,t])=>{const el=document.getElementById('timer-'+id);if(el)el.textContent=formatDur(Date.now()-t.start);});
-  const ws=getWeekStart();
-  employees.forEach(emp=>{
-    const el=document.getElementById('att-timer-'+emp.id);
-    if(el) el.textContent=formatDur(weeklyAttHoursForEmp(emp.id));
-  });
-  renderStats();
-  document.getElementById('liveClock').textContent=new Date().toLocaleTimeString();
-},1000);
-
-// ── Job modal ─────────────────────────────────────────────────────────
-window.openAddJob = function(empId) { pendingEmpId=empId; currentEditJob=null; showJobModal(); };
-window.openEditJob = function(jobId) { currentEditJob=jobs.find(j=>j.id===jobId); showJobModal(); };
-
-function showJobModal() {
-  const j=currentEditJob;
-  const empOpts=employees.map(e=>`<option value="${e.id}" ${(j&&j.empId===e.id)||(pendingEmpId===e.id&&!j)?'selected':''}>${e.name}</option>`).join('');
-  document.getElementById('modalContainer').innerHTML=`
-    <div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
-      <h3>${j?'Edit job':'New job'}</h3>
-      <div class="form-group"><label class="form-label">JOB TITLE</label><input class="form-input" id="fTitle" value="${j?j.title:''}" placeholder="Job title"></div>
-      <div class="form-group"><label class="form-label">JOB ID / CODE</label><input class="form-input" id="fCode" value="${j?j.jobCode||'':''}" placeholder="e.g. JOB-001"></div>
-      <div class="form-group"><label class="form-label">DESCRIPTION BULLETS</label><textarea class="form-textarea" id="fBullets" placeholder="One bullet per line...">${j?(j.bullets||[]).join('\n'):''}</textarea><div class="bullets-helper">Each line becomes a bullet</div></div>
-      <div class="form-group"><label class="form-label">ASSIGNED TO</label><select class="form-select" id="fEmp">${empOpts}</select></div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">PRIORITY</label><select class="form-select" id="fPriority"><option value="high" ${j&&j.priority==='high'?'selected':''}>Urgent</option><option value="medium" ${j&&j.priority==='medium'?'selected':''}>Normal</option><option value="low" ${j&&j.priority==='low'?'selected':''}>Low</option></select></div>
-        <div class="form-group"><label class="form-label">EST. HOURS</label><input class="form-input" type="number" id="fEst" min="0.5" step="0.5" value="${j?j.estHours||'':''}" placeholder="e.g. 4"></div>
-      </div>
-      <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveJobModal()">Save job</button></div>
-    </div></div>`;}
-
-window.saveJobModal = async function() {
-  const title=document.getElementById('fTitle').value.trim(); if(!title)return;
-  const payload={ id:currentEditJob?currentEditJob.id:'j'+Date.now(), empId:document.getElementById('fEmp').value, title, jobCode:document.getElementById('fCode').value.trim(), bullets:document.getElementById('fBullets').value.split('\n').map(l=>l.trim()).filter(Boolean), priority:document.getElementById('fPriority').value, estHours:parseFloat(document.getElementById('fEst').value)||0 };
-  await saveJob(payload);
-  closeModal();
-};
-
-// ── Employee modal ────────────────────────────────────────────────────
-window.openAddEmployee    = function() { currentEditEmployee=null; showEmployeeModal(); };
-window.openEditEmployee   = function(empId) { currentEditEmployee=employees.find(e=>e.id===empId); showEmployeeModal(); };
-
-function showEmployeeModal() {
-  const e=currentEditEmployee;
-  document.getElementById('modalContainer').innerHTML=`
-    <div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
-      <h3>${e?'Edit employee':'Add employee'}</h3>
-      <div class="form-group"><label class="form-label">NAME</label><input class="form-input" id="eName" value="${e?e.name:''}" placeholder="Full name"></div>
-      <div class="form-group"><label class="form-label">ROLE / TITLE</label><input class="form-input" id="eRole" value="${e?e.role:''}" placeholder="e.g. Fabricator"></div>
-      <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployeeModal()">${e?'Save changes':'Add employee'}</button></div>
-    </div></div>`;}
-
-window.saveEmployeeModal = async function() {
-  const name=document.getElementById('eName').value.trim(), role=document.getElementById('eRole').value.trim(); if(!name)return;
-  const id=currentEditEmployee?currentEditEmployee.id:'e'+Date.now();
-  await saveEmployee({ id, name, role:role||'Team Member' });
-  closeModal();
-};
-
-window.closeModal = function() { document.getElementById('modalContainer').innerHTML=''; };
-
-document.getElementById('liveClock').textContent=new Date().toLocaleTimeString();
-</script>
 <script>
-// ── Password gate ─────────────────────────────────────────────────────
-// Stored hashed so the plain password isn't visible in source
-const PW_HASH = '2fdc0177057d3a5c6c2c0821e01f4fa8d90f9a3bb7afd82b0db526af98d68de8'; // "employee"
+// ── Password gate — Firebase only starts after correct password ────────
+const PW_HASH = '2fdc0177057d3a5c6c2c0821e01f4fa8d90f9a3bb7afd82b0db526af98d68de8';
+
 async function hashStr(str) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
+
+function showApp() {
+  document.getElementById('pwScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = 'block';
+  startFirebase();
+}
+
 async function checkPassword() {
-  const val = document.getElementById('pwInput').value;
+  const val  = document.getElementById('pwInput').value;
   const hash = await hashStr(val);
   if (hash === PW_HASH) {
     sessionStorage.setItem('tc_auth','1');
-    document.getElementById('pwScreen').style.display = 'none';
-    document.getElementById('appShell').style.display = 'block';
     document.getElementById('pwInput').value = '';
+    showApp();
   } else {
     const inp = document.getElementById('pwInput');
     const err = document.getElementById('pwError');
@@ -674,10 +238,202 @@ async function checkPassword() {
     setTimeout(()=>{ inp.classList.remove('error'); err.textContent=''; }, 1500);
   }
 }
-// Stay logged in for the browser session
+
+function startFirebase() {
+  // Dynamically import Firebase only after password is confirmed
+  const s = document.createElement('script');
+  s.type = 'module';
+  s.textContent = `
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+    import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey:            "AIzaSyBNorf5AU_cS-0N_M2C5DMgRHesrd6Yh5s",
+      authDomain:        "employee-timeclock-fca3a.firebaseapp.com",
+      projectId:         "employee-timeclock-fca3a",
+      storageBucket:     "employee-timeclock-fca3a.firebasestorage.app",
+      messagingSenderId: "1008260914486",
+      appId:             "1:1008260914486:web:92e113e41a88cccd822797"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+
+    const empCol = collection(db,'employees');
+    const jobCol = collection(db,'jobs');
+    const logCol = collection(db,'jobLog');
+    const attCol = collection(db,'attendanceLog');
+    const activeAttCol = collection(db,'activeAttendance');
+
+    let employees=[],jobs=[],logEntries=[],attendanceLog=[];
+    let activeTimers={},attendanceTimers={};
+    let currentEditJob=null,currentEditEmployee=null,pendingEmpId=null;
+    let dbReady=0;
+
+    function checkReady(){
+      dbReady++;
+      if(dbReady>=4){
+        document.getElementById('loadingOverlay').style.display='none';
+        document.getElementById('syncDot').classList.remove('offline');
+        renderBoard();renderStats();
+      }
+    }
+
+    onSnapshot(empCol, snap=>{employees=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));checkReady();renderBoard();renderStats();});
+    onSnapshot(query(jobCol), snap=>{jobs=snap.docs.map(d=>({id:d.id,...d.data()}));checkReady();renderBoard();renderStats();});
+    onSnapshot(query(logCol,orderBy('start','desc')), snap=>{logEntries=snap.docs.map(d=>({id:d.id,...d.data()}));checkReady();renderBoard();renderStats();});
+    onSnapshot(query(attCol,orderBy('start','desc')), snap=>{attendanceLog=snap.docs.map(d=>({id:d.id,...d.data()}));checkReady();renderBoard();renderStats();});
+    onSnapshot(activeAttCol, snap=>{attendanceTimers={};snap.docs.forEach(d=>{attendanceTimers[d.id]=d.data();});renderBoard();renderStats();});
+
+    async function saveEmployee(emp){const{id,...data}=emp;await setDoc(doc(db,'employees',id),data);}
+    async function saveJob(job){const{id,...data}=job;await setDoc(doc(db,'jobs',id),data);}
+    async function saveLogEntry(entry){const{id,...data}=entry;await setDoc(doc(db,'jobLog',id),data);}
+    async function saveAttEntry(entry){const{id,...data}=entry;await setDoc(doc(db,'attendanceLog',id),data);}
+
+    window.deleteEmployee = async function(empId){
+      const emp=employees.find(e=>e.id===empId),empJobs=jobs.filter(j=>j.empId===empId);
+      const msg=empJobs.length>0?\`Delete \${emp.name}? This will also delete their \${empJobs.length} job(s).\`:\`Delete \${emp.name}?\`;
+      if(!confirm(msg))return;
+      empJobs.forEach(j=>{if(activeTimers[j.id])delete activeTimers[j.id];});
+      await Promise.all([deleteDoc(doc(db,'employees',empId)),...empJobs.map(j=>deleteDoc(doc(db,'jobs',j.id)))]);
+    };
+    window.deleteJob=async function(jobId){if(activeTimers[jobId])delete activeTimers[jobId];await deleteDoc(doc(db,'jobs',jobId));};
+
+    function formatDur(ms){const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=s%60;return \`\${String(h).padStart(2,'0')}:\${String(m).padStart(2,'0')}:\${String(sc).padStart(2,'0')}\`;}
+    function durHours(ms){return(ms/3600000).toFixed(2);}
+    function fmtTime(ts){return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
+    function fmtDate(ts){return new Date(ts).toLocaleDateString([],{month:'short',day:'numeric'});}
+    function fmtDateTime(ts){return fmtDate(ts)+' '+fmtTime(ts);}
+    function isToday(ts){const d=new Date(ts),n=new Date();return d.getFullYear()===n.getFullYear()&&d.getMonth()===n.getMonth()&&d.getDate()===n.getDate();}
+    function getWeekStart(){const now=new Date(),d=new Date(now.getFullYear(),now.getMonth(),now.getDate());d.setDate(d.getDate()-d.getDay());return d.getTime();}
+    function isThisWeek(ts){return ts>=getWeekStart();}
+
+    window.attendanceIn=async function(empId){if(attendanceTimers[empId])return;await setDoc(doc(db,'activeAttendance',empId),{start:Date.now()});};
+    window.attendanceOut=async function(empId){
+      if(!attendanceTimers[empId])return;
+      const empJobs=jobs.filter(j=>j.empId===empId),runningJob=empJobs.find(j=>activeTimers[j.id]);
+      if(runningJob){document.getElementById('modalContainer').innerHTML=\`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><h3 style="color:#f87171;">Cannot Clock Out</h3><p style="font-size:14px;color:#9494aa;line-height:1.6;margin-bottom:20px;">You must clock out of <strong style="color:#e2e2e8;">\${runningJob.title}</strong> before clocking out for attendance.</p><div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">OK, go back</button></div></div></div>\`;return;}
+      const start=attendanceTimers[empId].start,end=Date.now(),emp=employees.find(e=>e.id===empId);
+      await Promise.all([saveAttEntry({id:'a'+Date.now(),empId,empName:emp?emp.name:'—',start,end,duration:end-start}),deleteDoc(doc(db,'activeAttendance',empId))]);
+    };
+
+    window.punchIn=async function(jobId){
+      if(activeTimers[jobId])return;
+      const job=jobs.find(j=>j.id===jobId);
+      if(job&&!attendanceTimers[job.empId]){
+        const emp=employees.find(e=>e.id===job.empId);
+        document.getElementById('modalContainer').innerHTML=\`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><h3 style="color:#f0aa55;">Attendance Required</h3><p style="font-size:14px;color:#9494aa;line-height:1.6;margin-bottom:20px;"><strong style="color:#e2e2e8;">\${emp?emp.name:'This employee'}</strong> must clock in for attendance before starting a job.</p><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="closeModal();attendanceIn('\${job.empId}').then(()=>punchIn('\${jobId}'))">Clock In for Attendance &amp; Job</button></div></div></div>\`;
+        return;
+      }
+      activeTimers[jobId]={start:Date.now()};renderBoard();renderStats();
+    };
+
+    window.punchOut=function(jobId){
+      if(!activeTimers[jobId])return;
+      const job=jobs.find(j=>j.id===jobId),elapsed=formatDur(Date.now()-activeTimers[jobId].start);
+      document.getElementById('modalContainer').innerHTML=\`<div class="modal-overlay"><div class="modal modal-wide"><h3 style="display:flex;align-items:center;gap:10px;">Clock Out <span style="font-size:11px;font-weight:400;color:#555568;font-family:'DM Mono',monospace;">\${job?job.title:''}</span></h3><div style="background:#13131a;border:1px solid #222230;border-radius:8px;padding:10px 14px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;color:#666680;">Session time</span><span style="font-family:'DM Mono',monospace;font-size:20px;color:#5aba8d;" id="clockOutTimer">\${elapsed}</span></div><div class="form-group"><label class="form-label">WORK NOTES <span style="color:#e87d5a;">*</span></label><textarea class="form-textarea" id="punchOutNotes" rows="3" placeholder="Describe what you worked on…"></textarea><div class="notes-required-hint" id="notesHint">⚠ Work notes are required.</div></div><div class="form-group"><label class="form-label">MATERIALS USED <span style="color:#e87d5a;">*</span></label><textarea class="form-textarea" id="punchOutMaterials" rows="3" placeholder='List materials… Enter "None" if none.'></textarea><div class="notes-required-hint" id="materialsHint">⚠ Materials required. Enter "None" if none.</div></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn" style="background:#5aba8d;color:#0f0f11;font-weight:600;" onclick="confirmPunchOut('\${jobId}')">⬛ Confirm Clock Out</button></div></div></div>\`;
+      const te=document.getElementById('clockOutTimer'),tk=setInterval(()=>{if(!document.getElementById('clockOutTimer')){clearInterval(tk);return;}te.textContent=formatDur(Date.now()-activeTimers[jobId].start);},1000);
+    };
+
+    window.confirmPunchOut=async function(jobId){
+      const ne=document.getElementById('punchOutNotes'),me=document.getElementById('punchOutMaterials');
+      const notes=ne.value.trim(),materials=me.value.trim();
+      let valid=true;
+      if(!notes){ne.classList.add('error');document.getElementById('notesHint').classList.add('visible');if(valid)ne.focus();valid=false;}
+      if(!materials){me.classList.add('error');document.getElementById('materialsHint').classList.add('visible');if(valid)me.focus();valid=false;}
+      if(!valid||!activeTimers[jobId]){if(!activeTimers[jobId])closeModal();return;}
+      const start=activeTimers[jobId].start,end=Date.now(),job=jobs.find(j=>j.id===jobId),emp=job?employees.find(e=>e.id===job.empId):null;
+      const entry={id:'l'+Date.now(),jobId,jobTitle:job?job.title:'—',empName:emp?emp.name:'—',start,end,duration:end-start,workNotes:notes,materials};
+      delete activeTimers[jobId];closeModal();await saveLogEntry(entry);renderBoard();renderStats();
+    };
+
+    window.cancelPunchOut=()=>closeModal();
+
+    function renderStats(){
+      let todayMs=0,weekMs=0;
+      logEntries.forEach(e=>{if(isToday(e.start))todayMs+=e.duration;if(isThisWeek(e.start))weekMs+=e.duration;});
+      Object.entries(activeTimers).forEach(([,t])=>{const el=Date.now()-t.start;if(isToday(t.start))todayMs+=el;if(isThisWeek(t.start))weekMs+=el;});
+      document.getElementById('statToday').textContent=durHours(todayMs)+'h';
+      document.getElementById('statWeek').textContent=durHours(weekMs)+'h';
+      document.getElementById('statActive').textContent=Object.keys(activeTimers).length;
+      document.getElementById('statAttActive').textContent=Object.keys(attendanceTimers).length;
+      document.getElementById('statEmps').textContent=employees.length;
+    }
+
+    function weeklyAttHoursForEmp(empId){
+      const ws=getWeekStart();
+      let ms=attendanceLog.filter(a=>a.empId===empId&&a.start>=ws).reduce((s,a)=>s+a.duration,0);
+      if(attendanceTimers[empId]&&attendanceTimers[empId].start>=ws)ms+=Date.now()-attendanceTimers[empId].start;
+      return ms;
+    }
+    function totalLoggedMs(jobId){return logEntries.filter(e=>e.jobId===jobId).reduce((s,e)=>s+e.duration,0);}
+    function pillClass(p){return{high:'pill-high',medium:'pill-medium',low:'pill-low'}[p]||'pill-low';}
+    function pillLabel(p){return{high:'Urgent',medium:'Normal',low:'Low'}[p]||p;}
+
+    function renderBoard(){
+      const board=document.getElementById('board');board.innerHTML='';
+      employees.forEach(emp=>{
+        const empJobs=jobs.filter(j=>j.empId===emp.id);
+        const empLogMs=empJobs.reduce((s,j)=>s+totalLoggedMs(j.id),0);
+        const empActMs=empJobs.reduce((s,j)=>{if(activeTimers[j.id])s+=Date.now()-activeTimers[j.id].start;return s;},0);
+        const attRunning=!!attendanceTimers[emp.id];
+        const weekAttMs=weeklyAttHoursForEmp(emp.id);
+        const hasRunningJob=empJobs.some(j=>activeTimers[j.id]);
+        const col=document.createElement('div');col.className='kb-column';
+        col.innerHTML=\`<div class="col-header"><div><div class="col-name">\${emp.name}</div><div class="col-role">\${emp.role}</div></div><div style="display:flex;align-items:center;gap:6px;"><div class="col-count">\${empJobs.length}</div><div class="col-hours">\${durHours(empLogMs+empActMs)}h</div><button class="emp-btn" onclick="openEditEmployee('\${emp.id}')" title="Edit">✎</button><button class="emp-btn emp-del" onclick="deleteEmployee('\${emp.id}')" title="Delete">✕</button></div></div><div class="attendance-bar"><div class="attendance-bar-inner"><span class="attendance-label">Week Att.</span><div style="display:flex;align-items:center;gap:6px;flex:1;justify-content:center;"><div class="att-dot \${attRunning?'att-running':''}"></div><span class="attendance-timer \${attRunning?'att-running':''}" id="att-timer-\${emp.id}">\${formatDur(weekAttMs)}</span></div>\${attRunning?\`<button class="btn-att-out \${hasRunningJob?'att-blocked':''}" onclick="attendanceOut('\${emp.id}')" title="\${hasRunningJob?'Clock out of job first':'Clock out for the day'}">⬛ Clock Out</button>\`:\`<button class="btn-att-in" onclick="attendanceIn('\${emp.id}')">▶ Clock In</button>\`}</div></div><div class="col-body" id="colbody-\${emp.id}"></div><button class="col-add-btn" onclick="openAddJob('\${emp.id}')">+ Add job</button>\`;
+        board.appendChild(col);
+        const colBody=col.querySelector(\`#colbody-\${emp.id}\`);
+        if(!empJobs.length){colBody.innerHTML='<div class="empty-col">No jobs assigned</div>';return;}
+        empJobs.forEach(job=>{
+          const isRunning=!!activeTimers[job.id],logMs=totalLoggedMs(job.id),actMs=isRunning?Date.now()-activeTimers[job.id].start:0,totalMs=logMs+actMs,estMs=(job.estHours||0)*3600000,isOver=estMs>0&&totalMs>estMs,isHalf=estMs>0&&!isOver&&totalMs>=estMs*0.5,sessions=logEntries.filter(e=>e.jobId===job.id).length,lastEntry=logEntries.find(e=>e.jobId===job.id);
+          const card=document.createElement('div');let cls='task-card';if(!attRunning)cls+=' locked';if(isRunning)cls+=' clocked-in';if(isHalf)cls+=' halfway';if(isOver)cls+=' over-budget';card.className=cls;
+          card.innerHTML=\`<div class="card-title-row"><div class="card-title">\${job.title}</div><span class="priority-pill \${pillClass(job.priority)}">\${pillLabel(job.priority)}</span></div>\${(job.bullets||[]).length?\`<ul class="card-bullets">\${job.bullets.map(b=>\`<li>\${b}</li>\`).join('')}</ul>\`:''}<div class="card-timer-section"><div class="timer-row"><div class="timer-display \${isRunning?'running':''}" id="timer-\${job.id}">\${isRunning?formatDur(Date.now()-activeTimers[job.id].start):formatDur(0)}</div><div class="pulse-dot \${isRunning?'running':''}"></div></div><div class="timer-meta \${isRunning?'running':''}">\${isRunning?'Clocked in at '+fmtTime(activeTimers[job.id].start):(lastEntry?'Last: '+fmtDateTime(lastEntry.start):'Not started')}</div>\${sessions>0?\`<div style="margin-top:5px;color:#7b6ef6;font-size:11px;font-family:'DM Mono',monospace;">Total: \${durHours(logMs)}h · \${sessions} session\${sessions===1?'':'s'}</div>\`:''}</div><div class="card-footer"><div class="card-meta-row"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="opacity:.6;flex-shrink:0"><circle cx="8" cy="8" r="6.5" stroke="#9494aa" stroke-width="1.4"/><path d="M8 5v3.5l2 2" stroke="#9494aa" stroke-width="1.4" stroke-linecap="round"/></svg><span class="meta-label">Job ID:</span><span class="meta-val" style="font-family:'DM Mono',monospace;font-size:11px;">\${job.jobCode||'—'}</span></div>\${job.estHours?\`<div class="card-meta-row"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="opacity:.6;flex-shrink:0"><path d="M3 1v14M3 2h9l-2.5 4L12 10H3" stroke="#9494aa" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="meta-label">Est.:</span><span class="meta-val" style="\${isOver?'color:#e87d5a':''}">\${job.estHours}h\${isOver?' ⚠ over':(!isOver&&totalMs>0?' ('+Math.round(totalMs/estMs*100)+'%)':'')}</span></div>\`:''}<div class="card-actions">\${isRunning?\`<button class="btn-punch-out" onclick="punchOut('\${job.id}')">⬛ Clock Out</button>\`:\`<button class="btn-punch-in" onclick="punchIn('\${job.id}')">▶ Clock In</button>\`}<button class="card-btn" onclick="openEditJob('\${job.id}')">Edit</button><button class="card-btn del" onclick="deleteJob('\${job.id}')">Delete</button></div></div>\`;
+          colBody.appendChild(card);
+        });
+      });
+      const addColBtn=document.createElement('button');addColBtn.className='add-col-btn';addColBtn.innerHTML='+';addColBtn.onclick=()=>openAddEmployee();board.appendChild(addColBtn);
+    }
+
+    setInterval(()=>{
+      Object.entries(activeTimers).forEach(([id,t])=>{const el=document.getElementById('timer-'+id);if(el)el.textContent=formatDur(Date.now()-t.start);});
+      employees.forEach(emp=>{const el=document.getElementById('att-timer-'+emp.id);if(el)el.textContent=formatDur(weeklyAttHoursForEmp(emp.id));});
+      renderStats();
+      document.getElementById('liveClock').textContent=new Date().toLocaleTimeString();
+    },1000);
+
+    window.openAddJob=function(empId){pendingEmpId=empId;currentEditJob=null;showJobModal();};
+    window.openEditJob=function(jobId){currentEditJob=jobs.find(j=>j.id===jobId);showJobModal();};
+    function showJobModal(){
+      const j=currentEditJob,empOpts=employees.map(e=>\`<option value="\${e.id}" \${(j&&j.empId===e.id)||(pendingEmpId===e.id&&!j)?'selected':''}>\${e.name}</option>\`).join('');
+      document.getElementById('modalContainer').innerHTML=\`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><h3>\${j?'Edit job':'New job'}</h3><div class="form-group"><label class="form-label">JOB TITLE</label><input class="form-input" id="fTitle" value="\${j?j.title:''}" placeholder="Job title"></div><div class="form-group"><label class="form-label">JOB ID / CODE</label><input class="form-input" id="fCode" value="\${j?j.jobCode||'':''}" placeholder="e.g. JOB-001"></div><div class="form-group"><label class="form-label">DESCRIPTION BULLETS</label><textarea class="form-textarea" id="fBullets" placeholder="One bullet per line...">\${j?(j.bullets||[]).join('\\n'):''}</textarea><div class="bullets-helper">Each line becomes a bullet</div></div><div class="form-group"><label class="form-label">ASSIGNED TO</label><select class="form-select" id="fEmp">\${empOpts}</select></div><div class="form-row"><div class="form-group"><label class="form-label">PRIORITY</label><select class="form-select" id="fPriority"><option value="high" \${j&&j.priority==='high'?'selected':''}>Urgent</option><option value="medium" \${j&&j.priority==='medium'?'selected':''}>Normal</option><option value="low" \${j&&j.priority==='low'?'selected':''}>Low</option></select></div><div class="form-group"><label class="form-label">EST. HOURS</label><input class="form-input" type="number" id="fEst" min="0.5" step="0.5" value="\${j?j.estHours||'':''}" placeholder="e.g. 4"></div></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveJobModal()">Save job</button></div></div></div>\`;
+    }
+    window.saveJobModal=async function(){
+      const title=document.getElementById('fTitle').value.trim();if(!title)return;
+      const payload={id:currentEditJob?currentEditJob.id:'j'+Date.now(),empId:document.getElementById('fEmp').value,title,jobCode:document.getElementById('fCode').value.trim(),bullets:document.getElementById('fBullets').value.split('\\n').map(l=>l.trim()).filter(Boolean),priority:document.getElementById('fPriority').value,estHours:parseFloat(document.getElementById('fEst').value)||0};
+      await saveJob(payload);closeModal();
+    };
+
+    window.openAddEmployee=function(){currentEditEmployee=null;showEmployeeModal();};
+    window.openEditEmployee=function(empId){currentEditEmployee=employees.find(e=>e.id===empId);showEmployeeModal();};
+    function showEmployeeModal(){
+      const e=currentEditEmployee;
+      document.getElementById('modalContainer').innerHTML=\`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><h3>\${e?'Edit employee':'Add employee'}</h3><div class="form-group"><label class="form-label">NAME</label><input class="form-input" id="eName" value="\${e?e.name:''}" placeholder="Full name"></div><div class="form-group"><label class="form-label">ROLE / TITLE</label><input class="form-input" id="eRole" value="\${e?e.role:''}" placeholder="e.g. Fabricator"></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployeeModal()">\${e?'Save changes':'Add employee'}</button></div></div></div>\`;
+    }
+    window.saveEmployeeModal=async function(){
+      const name=document.getElementById('eName').value.trim(),role=document.getElementById('eRole').value.trim();if(!name)return;
+      const id=currentEditEmployee?currentEditEmployee.id:'e'+Date.now();
+      await saveEmployee({id,name,role:role||'Team Member'});closeModal();
+    };
+
+    window.closeModal=function(){document.getElementById('modalContainer').innerHTML='';};
+    document.getElementById('liveClock').textContent=new Date().toLocaleTimeString();
+  `;
+  document.head.appendChild(s);
+}
+
+// Check if already authenticated this session
 if (sessionStorage.getItem('tc_auth') === '1') {
-  document.getElementById('pwScreen').style.display = 'none';
-  document.getElementById('appShell').style.display = 'block';
+  showApp();
 } else {
   setTimeout(()=>document.getElementById('pwInput').focus(), 100);
 }
