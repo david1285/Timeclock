@@ -295,7 +295,8 @@ async function hashStr(str) {
 function showApp() {
   document.getElementById('pwScreen').style.display = 'none';
   document.getElementById('appShell').style.display = 'block';
-  startFirebase();
+  document.getElementById('loadingOverlay').style.display = 'none';
+  if (!window._fbStarted) { window._fbStarted = true; startFirebase(); }
 }
 async function checkPassword() {
   const val = document.getElementById('pwInput').value;
@@ -334,33 +335,23 @@ const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
 
 let employees = [], jobs = [], logEntries = [], attendanceLog = [];
-let dbReady = 0;
-
-function checkReady() {
-  dbReady++;
-  if (dbReady >= 4) {
-    document.getElementById('loadingOverlay').style.display = 'none';
-    document.getElementById('syncDot').classList.remove('offline');
-    populateDropdowns(); applyJobFilters(); applyAttFilters();
-    renderEmpWeekStrip(); renderStats();
-  }
-}
 
 onSnapshot(collection(db,'employees'), snap => {
   employees = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-  checkReady(); populateDropdowns(); applyAttFilters(); renderEmpWeekStrip(); renderStats();
+  document.getElementById('syncDot').classList.remove('offline');
+  populateDropdowns(); applyAttFilters(); renderEmpWeekStrip(); renderStats();
 });
 onSnapshot(collection(db,'jobs'), snap => {
   jobs = snap.docs.map(d=>({id:d.id,...d.data()}));
-  checkReady(); populateDropdowns(); applyJobFilters();
+  populateDropdowns(); applyJobFilters();
 });
 onSnapshot(query(collection(db,'jobLog'),orderBy('start','desc')), snap => {
   logEntries = snap.docs.map(d=>({id:d.id,...d.data()}));
-  checkReady(); populateDropdowns(); applyJobFilters(); renderStats();
+  populateDropdowns(); applyJobFilters(); renderStats();
 });
 onSnapshot(query(collection(db,'attendanceLog'),orderBy('start','desc')), snap => {
   attendanceLog = snap.docs.map(d=>({id:d.id,...d.data()}));
-  checkReady(); applyAttFilters(); renderEmpWeekStrip(); renderStats();
+  applyAttFilters(); renderEmpWeekStrip(); renderStats();
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────

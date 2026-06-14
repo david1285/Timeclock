@@ -219,7 +219,9 @@ async function hashStr(str) {
 function showApp() {
   document.getElementById('pwScreen').style.display = 'none';
   document.getElementById('appShell').style.display = 'block';
-  startFirebase();
+  // Hide loading overlay immediately — Firebase will populate the board once connected
+  document.getElementById('loadingOverlay').style.display = 'none';
+  if (!window._fbStarted) { window._fbStarted = true; startFirebase(); }
 }
 
 async function checkPassword() {
@@ -268,21 +270,11 @@ function startFirebase() {
     let employees=[],jobs=[],logEntries=[],attendanceLog=[];
     let activeTimers={},attendanceTimers={};
     let currentEditJob=null,currentEditEmployee=null,pendingEmpId=null;
-    let dbReady=0;
 
-    function checkReady(){
-      dbReady++;
-      if(dbReady>=4){
-        document.getElementById('loadingOverlay').style.display='none';
-        document.getElementById('syncDot').classList.remove('offline');
-        renderBoard();renderStats();
-      }
-    }
-
-    onSnapshot(empCol, snap=>{employees=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));checkReady();renderBoard();renderStats();});
-    onSnapshot(query(jobCol), snap=>{jobs=snap.docs.map(d=>({id:d.id,...d.data()}));checkReady();renderBoard();renderStats();});
-    onSnapshot(query(logCol,orderBy('start','desc')), snap=>{logEntries=snap.docs.map(d=>({id:d.id,...d.data()}));checkReady();renderBoard();renderStats();});
-    onSnapshot(query(attCol,orderBy('start','desc')), snap=>{attendanceLog=snap.docs.map(d=>({id:d.id,...d.data()}));checkReady();renderBoard();renderStats();});
+    onSnapshot(empCol, snap=>{employees=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));document.getElementById('syncDot').classList.remove('offline');renderBoard();renderStats();});
+    onSnapshot(query(jobCol), snap=>{jobs=snap.docs.map(d=>({id:d.id,...d.data()}));renderBoard();renderStats();});
+    onSnapshot(query(logCol,orderBy('start','desc')), snap=>{logEntries=snap.docs.map(d=>({id:d.id,...d.data()}));renderBoard();renderStats();});
+    onSnapshot(query(attCol,orderBy('start','desc')), snap=>{attendanceLog=snap.docs.map(d=>({id:d.id,...d.data()}));renderBoard();renderStats();});
     onSnapshot(activeAttCol, snap=>{attendanceTimers={};snap.docs.forEach(d=>{attendanceTimers[d.id]=d.data();});renderBoard();renderStats();});
 
     async function saveEmployee(emp){const{id,...data}=emp;await setDoc(doc(db,'employees',id),data);}
