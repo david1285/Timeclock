@@ -168,21 +168,12 @@ body { font-family: 'DM Sans', sans-serif; background: #0f0f11; color: #e2e2e8; 
 </head>
 <body>
 
-<div class="pw-screen" id="pwScreen">
-  <div class="pw-card">
-    <div class="pw-logo">task<span>flow</span></div>
     <div class="pw-title">Employee Board</div>
     <input class="pw-input" id="pwInput" type="password" placeholder="••••••••"
       onkeydown="if(event.key==='Enter')checkPassword()" autocomplete="off" autocorrect="off" spellcheck="false">
     <div class="pw-error" id="pwError"></div>
     <button class="pw-btn" onclick="checkPassword()">Sign In</button>
   </div>
-</div>
-
-<div id="appShell" style="display:none;">
-
-  <div class="loading-spinner"></div>
-  <div class="loading-text">Connecting to database…</div>
 </div>
 
 <div class="kb-header">
@@ -204,48 +195,9 @@ body { font-family: 'DM Sans', sans-serif; background: #0f0f11; color: #e2e2e8; 
 
 <div class="kb-board" id="board"></div>
 <div id="modalContainer"></div>
-</div><!-- /appShell -->
 
 
-<script>
-// ── Password gate — Firebase only starts after correct password ────────
-const PW_HASH = '2fdc0177057d3a5c6c2c0821e01f4fa8d90f9a3bb7afd82b0db526af98d68de8';
-
-async function hashStr(str) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
-
-function showApp() {
-  document.getElementById('pwScreen').style.display = 'none';
-  document.getElementById('appShell').style.display = 'block';
-  // Hide loading overlay immediately — Firebase will populate the board once connected
-  document.getElementById('loadingOverlay').style.display = 'none';
-  if (!window._fbStarted) { window._fbStarted = true; startFirebase(); }
-}
-
-async function checkPassword() {
-  const val  = document.getElementById('pwInput').value;
-  const hash = await hashStr(val);
-  if (hash === PW_HASH) {
-    sessionStorage.setItem('tc_auth','1');
-    document.getElementById('pwInput').value = '';
-    showApp();
-  } else {
-    const inp = document.getElementById('pwInput');
-    const err = document.getElementById('pwError');
-    inp.classList.add('error');
-    err.textContent = 'Incorrect password. Try again.';
-    inp.value = '';
-    setTimeout(()=>{ inp.classList.remove('error'); err.textContent=''; }, 1500);
-  }
-}
-
-function startFirebase() {
-  // Dynamically import Firebase only after password is confirmed
-  const s = document.createElement('script');
-  s.type = 'module';
-  s.textContent = `
+<script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
     import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
@@ -284,14 +236,14 @@ function startFirebase() {
 
     window.deleteEmployee = async function(empId){
       const emp=employees.find(e=>e.id===empId),empJobs=jobs.filter(j=>j.empId===empId);
-      const msg=empJobs.length>0?\`Delete \${emp.name}? This will also delete their \${empJobs.length} job(s).\`:\`Delete \${emp.name}?\`;
+      const msg=empJobs.length>0?`Delete ${emp.name}? This will also delete their ${empJobs.length} job(s).`:`Delete ${emp.name}?`;
       if(!confirm(msg))return;
       empJobs.forEach(j=>{if(activeTimers[j.id])delete activeTimers[j.id];});
       await Promise.all([deleteDoc(doc(db,'employees',empId)),...empJobs.map(j=>deleteDoc(doc(db,'jobs',j.id)))]);
     };
     window.deleteJob=async function(jobId){if(activeTimers[jobId])delete activeTimers[jobId];await deleteDoc(doc(db,'jobs',jobId));};
 
-    function formatDur(ms){const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=s%60;return \`\${String(h).padStart(2,'0')}:\${String(m).padStart(2,'0')}:\${String(sc).padStart(2,'0')}\`;}
+    function formatDur(ms){const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=s%60;return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sc).padStart(2,'0')}`;}
     function durHours(ms){return(ms/3600000).toFixed(2);}
     function fmtTime(ts){return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
     function fmtDate(ts){return new Date(ts).toLocaleDateString([],{month:'short',day:'numeric'});}
@@ -304,7 +256,7 @@ function startFirebase() {
     window.attendanceOut=async function(empId){
       if(!attendanceTimers[empId])return;
       const empJobs=jobs.filter(j=>j.empId===empId),runningJob=empJobs.find(j=>activeTimers[j.id]);
-      if(runningJob){document.getElementById('modalContainer').innerHTML=\`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><h3 style="color:#f87171;">Cannot Clock Out</h3><p style="font-size:14px;color:#9494aa;line-height:1.6;margin-bottom:20px;">You must clock out of <strong style="color:#e2e2e8;">\${runningJob.title}</strong> before clocking out for attendance.</p><div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">OK, go back</button></div></div></div>\`;return;}
+      if(runningJob){document.getElementById('modalContainer').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><h3 style="color:#f87171;">Cannot Clock Out</h3><p style="font-size:14px;color:#9494aa;line-height:1.6;margin-bottom:20px;">You must clock out of <strong style="color:#e2e2e8;">${runningJob.title}</strong> before clocking out for attendance.</p><div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">OK, go back</button></div></div></div>`;return;}
       const start=attendanceTimers[empId].start,end=Date.now(),emp=employees.find(e=>e.id===empId);
       await Promise.all([saveAttEntry({id:'a'+Date.now(),empId,empName:emp?emp.name:'—',start,end,duration:end-start}),deleteDoc(doc(db,'activeAttendance',empId))]);
     };
@@ -314,7 +266,7 @@ function startFirebase() {
       const job=jobs.find(j=>j.id===jobId);
       if(job&&!attendanceTimers[job.empId]){
         const emp=employees.find(e=>e.id===job.empId);
-        document.getElementById('modalContainer').innerHTML=\`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><h3 style="color:#f0aa55;">Attendance Required</h3><p style="font-size:14px;color:#9494aa;line-height:1.6;margin-bottom:20px;"><strong style="color:#e2e2e8;">\${emp?emp.name:'This employee'}</strong> must clock in for attendance before starting a job.</p><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="closeModal();attendanceIn('\${job.empId}').then(()=>punchIn('\${jobId}'))">Clock In for Attendance &amp; Job</button></div></div></div>\`;
+        document.getElementById('modalContainer').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><h3 style="color:#f0aa55;">Attendance Required</h3><p style="font-size:14px;color:#9494aa;line-height:1.6;margin-bottom:20px;"><strong style="color:#e2e2e8;">${emp?emp.name:'This employee'}</strong> must clock in for attendance before starting a job.</p><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="closeModal();attendanceIn('${job.empId}').then(()=>punchIn('${jobId}'))">Clock In for Attendance &amp; Job</button></div></div></div>`;
         return;
       }
       activeTimers[jobId]={start:Date.now()};renderBoard();renderStats();
@@ -323,7 +275,7 @@ function startFirebase() {
     window.punchOut=function(jobId){
       if(!activeTimers[jobId])return;
       const job=jobs.find(j=>j.id===jobId),elapsed=formatDur(Date.now()-activeTimers[jobId].start);
-      document.getElementById('modalContainer').innerHTML=\`<div class="modal-overlay"><div class="modal modal-wide"><h3 style="display:flex;align-items:center;gap:10px;">Clock Out <span style="font-size:11px;font-weight:400;color:#555568;font-family:'DM Mono',monospace;">\${job?job.title:''}</span></h3><div style="background:#13131a;border:1px solid #222230;border-radius:8px;padding:10px 14px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;color:#666680;">Session time</span><span style="font-family:'DM Mono',monospace;font-size:20px;color:#5aba8d;" id="clockOutTimer">\${elapsed}</span></div><div class="form-group"><label class="form-label">WORK NOTES <span style="color:#e87d5a;">*</span></label><textarea class="form-textarea" id="punchOutNotes" rows="3" placeholder="Describe what you worked on…"></textarea><div class="notes-required-hint" id="notesHint">⚠ Work notes are required.</div></div><div class="form-group"><label class="form-label">MATERIALS USED <span style="color:#e87d5a;">*</span></label><textarea class="form-textarea" id="punchOutMaterials" rows="3" placeholder='List materials… Enter "None" if none.'></textarea><div class="notes-required-hint" id="materialsHint">⚠ Materials required. Enter "None" if none.</div></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn" style="background:#5aba8d;color:#0f0f11;font-weight:600;" onclick="confirmPunchOut('\${jobId}')">⬛ Confirm Clock Out</button></div></div></div>\`;
+      document.getElementById('modalContainer').innerHTML=`<div class="modal-overlay"><div class="modal modal-wide"><h3 style="display:flex;align-items:center;gap:10px;">Clock Out <span style="font-size:11px;font-weight:400;color:#555568;font-family:'DM Mono',monospace;">${job?job.title:''}</span></h3><div style="background:#13131a;border:1px solid #222230;border-radius:8px;padding:10px 14px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;"><span style="font-size:12px;color:#666680;">Session time</span><span style="font-family:'DM Mono',monospace;font-size:20px;color:#5aba8d;" id="clockOutTimer">${elapsed}</span></div><div class="form-group"><label class="form-label">WORK NOTES <span style="color:#e87d5a;">*</span></label><textarea class="form-textarea" id="punchOutNotes" rows="3" placeholder="Describe what you worked on…"></textarea><div class="notes-required-hint" id="notesHint">⚠ Work notes are required.</div></div><div class="form-group"><label class="form-label">MATERIALS USED <span style="color:#e87d5a;">*</span></label><textarea class="form-textarea" id="punchOutMaterials" rows="3" placeholder='List materials… Enter "None" if none.'></textarea><div class="notes-required-hint" id="materialsHint">⚠ Materials required. Enter "None" if none.</div></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn" style="background:#5aba8d;color:#0f0f11;font-weight:600;" onclick="confirmPunchOut('${jobId}')">⬛ Confirm Clock Out</button></div></div></div>`;
       const te=document.getElementById('clockOutTimer'),tk=setInterval(()=>{if(!document.getElementById('clockOutTimer')){clearInterval(tk);return;}te.textContent=formatDur(Date.now()-activeTimers[jobId].start);},1000);
     };
 
@@ -372,14 +324,14 @@ function startFirebase() {
         const weekAttMs=weeklyAttHoursForEmp(emp.id);
         const hasRunningJob=empJobs.some(j=>activeTimers[j.id]);
         const col=document.createElement('div');col.className='kb-column';
-        col.innerHTML=\`<div class="col-header"><div><div class="col-name">\${emp.name}</div><div class="col-role">\${emp.role}</div></div><div style="display:flex;align-items:center;gap:6px;"><div class="col-count">\${empJobs.length}</div><div class="col-hours">\${durHours(empLogMs+empActMs)}h</div><button class="emp-btn" onclick="openEditEmployee('\${emp.id}')" title="Edit">✎</button><button class="emp-btn emp-del" onclick="deleteEmployee('\${emp.id}')" title="Delete">✕</button></div></div><div class="attendance-bar"><div class="attendance-bar-inner"><span class="attendance-label">Week Att.</span><div style="display:flex;align-items:center;gap:6px;flex:1;justify-content:center;"><div class="att-dot \${attRunning?'att-running':''}"></div><span class="attendance-timer \${attRunning?'att-running':''}" id="att-timer-\${emp.id}">\${formatDur(weekAttMs)}</span></div>\${attRunning?\`<button class="btn-att-out \${hasRunningJob?'att-blocked':''}" onclick="attendanceOut('\${emp.id}')" title="\${hasRunningJob?'Clock out of job first':'Clock out for the day'}">⬛ Clock Out</button>\`:\`<button class="btn-att-in" onclick="attendanceIn('\${emp.id}')">▶ Clock In</button>\`}</div></div><div class="col-body" id="colbody-\${emp.id}"></div><button class="col-add-btn" onclick="openAddJob('\${emp.id}')">+ Add job</button>\`;
+        col.innerHTML=`<div class="col-header"><div><div class="col-name">${emp.name}</div><div class="col-role">${emp.role}</div></div><div style="display:flex;align-items:center;gap:6px;"><div class="col-count">${empJobs.length}</div><div class="col-hours">${durHours(empLogMs+empActMs)}h</div><button class="emp-btn" onclick="openEditEmployee('${emp.id}')" title="Edit">✎</button><button class="emp-btn emp-del" onclick="deleteEmployee('${emp.id}')" title="Delete">✕</button></div></div><div class="attendance-bar"><div class="attendance-bar-inner"><span class="attendance-label">Week Att.</span><div style="display:flex;align-items:center;gap:6px;flex:1;justify-content:center;"><div class="att-dot ${attRunning?'att-running':''}"></div><span class="attendance-timer ${attRunning?'att-running':''}" id="att-timer-${emp.id}">${formatDur(weekAttMs)}</span></div>${attRunning?`<button class="btn-att-out ${hasRunningJob?'att-blocked':''}" onclick="attendanceOut('${emp.id}')" title="${hasRunningJob?'Clock out of job first':'Clock out for the day'}">⬛ Clock Out</button>`:`<button class="btn-att-in" onclick="attendanceIn('${emp.id}')">▶ Clock In</button>`}</div></div><div class="col-body" id="colbody-${emp.id}"></div><button class="col-add-btn" onclick="openAddJob('${emp.id}')">+ Add job</button>`;
         board.appendChild(col);
-        const colBody=col.querySelector(\`#colbody-\${emp.id}\`);
+        const colBody=col.querySelector(`#colbody-${emp.id}`);
         if(!empJobs.length){colBody.innerHTML='<div class="empty-col">No jobs assigned</div>';return;}
         empJobs.forEach(job=>{
           const isRunning=!!activeTimers[job.id],logMs=totalLoggedMs(job.id),actMs=isRunning?Date.now()-activeTimers[job.id].start:0,totalMs=logMs+actMs,estMs=(job.estHours||0)*3600000,isOver=estMs>0&&totalMs>estMs,isHalf=estMs>0&&!isOver&&totalMs>=estMs*0.5,sessions=logEntries.filter(e=>e.jobId===job.id).length,lastEntry=logEntries.find(e=>e.jobId===job.id);
           const card=document.createElement('div');let cls='task-card';if(!attRunning)cls+=' locked';if(isRunning)cls+=' clocked-in';if(isHalf)cls+=' halfway';if(isOver)cls+=' over-budget';card.className=cls;
-          card.innerHTML=\`<div class="card-title-row"><div class="card-title">\${job.title}</div><span class="priority-pill \${pillClass(job.priority)}">\${pillLabel(job.priority)}</span></div>\${(job.bullets||[]).length?\`<ul class="card-bullets">\${job.bullets.map(b=>\`<li>\${b}</li>\`).join('')}</ul>\`:''}<div class="card-timer-section"><div class="timer-row"><div class="timer-display \${isRunning?'running':''}" id="timer-\${job.id}">\${isRunning?formatDur(Date.now()-activeTimers[job.id].start):formatDur(0)}</div><div class="pulse-dot \${isRunning?'running':''}"></div></div><div class="timer-meta \${isRunning?'running':''}">\${isRunning?'Clocked in at '+fmtTime(activeTimers[job.id].start):(lastEntry?'Last: '+fmtDateTime(lastEntry.start):'Not started')}</div>\${sessions>0?\`<div style="margin-top:5px;color:#7b6ef6;font-size:11px;font-family:'DM Mono',monospace;">Total: \${durHours(logMs)}h · \${sessions} session\${sessions===1?'':'s'}</div>\`:''}</div><div class="card-footer"><div class="card-meta-row"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="opacity:.6;flex-shrink:0"><circle cx="8" cy="8" r="6.5" stroke="#9494aa" stroke-width="1.4"/><path d="M8 5v3.5l2 2" stroke="#9494aa" stroke-width="1.4" stroke-linecap="round"/></svg><span class="meta-label">Job ID:</span><span class="meta-val" style="font-family:'DM Mono',monospace;font-size:11px;">\${job.jobCode||'—'}</span></div>\${job.estHours?\`<div class="card-meta-row"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="opacity:.6;flex-shrink:0"><path d="M3 1v14M3 2h9l-2.5 4L12 10H3" stroke="#9494aa" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="meta-label">Est.:</span><span class="meta-val" style="\${isOver?'color:#e87d5a':''}">\${job.estHours}h\${isOver?' ⚠ over':(!isOver&&totalMs>0?' ('+Math.round(totalMs/estMs*100)+'%)':'')}</span></div>\`:''}<div class="card-actions">\${isRunning?\`<button class="btn-punch-out" onclick="punchOut('\${job.id}')">⬛ Clock Out</button>\`:\`<button class="btn-punch-in" onclick="punchIn('\${job.id}')">▶ Clock In</button>\`}<button class="card-btn" onclick="openEditJob('\${job.id}')">Edit</button><button class="card-btn del" onclick="deleteJob('\${job.id}')">Delete</button></div></div>\`;
+          card.innerHTML=`<div class="card-title-row"><div class="card-title">${job.title}</div><span class="priority-pill ${pillClass(job.priority)}">${pillLabel(job.priority)}</span></div>${(job.bullets||[]).length?`<ul class="card-bullets">${job.bullets.map(b=>`<li>${b}</li>`).join('')}</ul>`:''}<div class="card-timer-section"><div class="timer-row"><div class="timer-display ${isRunning?'running':''}" id="timer-${job.id}">${isRunning?formatDur(Date.now()-activeTimers[job.id].start):formatDur(0)}</div><div class="pulse-dot ${isRunning?'running':''}"></div></div><div class="timer-meta ${isRunning?'running':''}">${isRunning?'Clocked in at '+fmtTime(activeTimers[job.id].start):(lastEntry?'Last: '+fmtDateTime(lastEntry.start):'Not started')}</div>${sessions>0?`<div style="margin-top:5px;color:#7b6ef6;font-size:11px;font-family:'DM Mono',monospace;">Total: ${durHours(logMs)}h · ${sessions} session${sessions===1?'':'s'}</div>`:''}</div><div class="card-footer"><div class="card-meta-row"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="opacity:.6;flex-shrink:0"><circle cx="8" cy="8" r="6.5" stroke="#9494aa" stroke-width="1.4"/><path d="M8 5v3.5l2 2" stroke="#9494aa" stroke-width="1.4" stroke-linecap="round"/></svg><span class="meta-label">Job ID:</span><span class="meta-val" style="font-family:'DM Mono',monospace;font-size:11px;">${job.jobCode||'—'}</span></div>${job.estHours?`<div class="card-meta-row"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="opacity:.6;flex-shrink:0"><path d="M3 1v14M3 2h9l-2.5 4L12 10H3" stroke="#9494aa" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="meta-label">Est.:</span><span class="meta-val" style="${isOver?'color:#e87d5a':''}">${job.estHours}h${isOver?' ⚠ over':(!isOver&&totalMs>0?' ('+Math.round(totalMs/estMs*100)+'%)':'')}</span></div>`:''}<div class="card-actions">${isRunning?`<button class="btn-punch-out" onclick="punchOut('${job.id}')">⬛ Clock Out</button>`:`<button class="btn-punch-in" onclick="punchIn('${job.id}')">▶ Clock In</button>`}<button class="card-btn" onclick="openEditJob('${job.id}')">Edit</button><button class="card-btn del" onclick="deleteJob('${job.id}')">Delete</button></div></div>`;
           colBody.appendChild(card);
         });
       });
@@ -396,12 +348,12 @@ function startFirebase() {
     window.openAddJob=function(empId){pendingEmpId=empId;currentEditJob=null;showJobModal();};
     window.openEditJob=function(jobId){currentEditJob=jobs.find(j=>j.id===jobId);showJobModal();};
     function showJobModal(){
-      const j=currentEditJob,empOpts=employees.map(e=>\`<option value="\${e.id}" \${(j&&j.empId===e.id)||(pendingEmpId===e.id&&!j)?'selected':''}>\${e.name}</option>\`).join('');
-      document.getElementById('modalContainer').innerHTML=\`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><h3>\${j?'Edit job':'New job'}</h3><div class="form-group"><label class="form-label">JOB TITLE</label><input class="form-input" id="fTitle" value="\${j?j.title:''}" placeholder="Job title"></div><div class="form-group"><label class="form-label">JOB ID / CODE</label><input class="form-input" id="fCode" value="\${j?j.jobCode||'':''}" placeholder="e.g. JOB-001"></div><div class="form-group"><label class="form-label">DESCRIPTION BULLETS</label><textarea class="form-textarea" id="fBullets" placeholder="One bullet per line...">\${j?(j.bullets||[]).join('\\n'):''}</textarea><div class="bullets-helper">Each line becomes a bullet</div></div><div class="form-group"><label class="form-label">ASSIGNED TO</label><select class="form-select" id="fEmp">\${empOpts}</select></div><div class="form-row"><div class="form-group"><label class="form-label">PRIORITY</label><select class="form-select" id="fPriority"><option value="high" \${j&&j.priority==='high'?'selected':''}>Urgent</option><option value="medium" \${j&&j.priority==='medium'?'selected':''}>Normal</option><option value="low" \${j&&j.priority==='low'?'selected':''}>Low</option></select></div><div class="form-group"><label class="form-label">EST. HOURS</label><input class="form-input" type="number" id="fEst" min="0.5" step="0.5" value="\${j?j.estHours||'':''}" placeholder="e.g. 4"></div></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveJobModal()">Save job</button></div></div></div>\`;
+      const j=currentEditJob,empOpts=employees.map(e=>`<option value="${e.id}" ${(j&&j.empId===e.id)||(pendingEmpId===e.id&&!j)?'selected':''}>${e.name}</option>`).join('');
+      document.getElementById('modalContainer').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><h3>${j?'Edit job':'New job'}</h3><div class="form-group"><label class="form-label">JOB TITLE</label><input class="form-input" id="fTitle" value="${j?j.title:''}" placeholder="Job title"></div><div class="form-group"><label class="form-label">JOB ID / CODE</label><input class="form-input" id="fCode" value="${j?j.jobCode||'':''}" placeholder="e.g. JOB-001"></div><div class="form-group"><label class="form-label">DESCRIPTION BULLETS</label><textarea class="form-textarea" id="fBullets" placeholder="One bullet per line...">${j?(j.bullets||[]).join('\n'):''}</textarea><div class="bullets-helper">Each line becomes a bullet</div></div><div class="form-group"><label class="form-label">ASSIGNED TO</label><select class="form-select" id="fEmp">${empOpts}</select></div><div class="form-row"><div class="form-group"><label class="form-label">PRIORITY</label><select class="form-select" id="fPriority"><option value="high" ${j&&j.priority==='high'?'selected':''}>Urgent</option><option value="medium" ${j&&j.priority==='medium'?'selected':''}>Normal</option><option value="low" ${j&&j.priority==='low'?'selected':''}>Low</option></select></div><div class="form-group"><label class="form-label">EST. HOURS</label><input class="form-input" type="number" id="fEst" min="0.5" step="0.5" value="${j?j.estHours||'':''}" placeholder="e.g. 4"></div></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveJobModal()">Save job</button></div></div></div>`;
     }
     window.saveJobModal=async function(){
       const title=document.getElementById('fTitle').value.trim();if(!title)return;
-      const payload={id:currentEditJob?currentEditJob.id:'j'+Date.now(),empId:document.getElementById('fEmp').value,title,jobCode:document.getElementById('fCode').value.trim(),bullets:document.getElementById('fBullets').value.split('\\n').map(l=>l.trim()).filter(Boolean),priority:document.getElementById('fPriority').value,estHours:parseFloat(document.getElementById('fEst').value)||0};
+      const payload={id:currentEditJob?currentEditJob.id:'j'+Date.now(),empId:document.getElementById('fEmp').value,title,jobCode:document.getElementById('fCode').value.trim(),bullets:document.getElementById('fBullets').value.split('\n').map(l=>l.trim()).filter(Boolean),priority:document.getElementById('fPriority').value,estHours:parseFloat(document.getElementById('fEst').value)||0};
       await saveJob(payload);closeModal();
     };
 
@@ -409,7 +361,7 @@ function startFirebase() {
     window.openEditEmployee=function(empId){currentEditEmployee=employees.find(e=>e.id===empId);showEmployeeModal();};
     function showEmployeeModal(){
       const e=currentEditEmployee;
-      document.getElementById('modalContainer').innerHTML=\`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><h3>\${e?'Edit employee':'Add employee'}</h3><div class="form-group"><label class="form-label">NAME</label><input class="form-input" id="eName" value="\${e?e.name:''}" placeholder="Full name"></div><div class="form-group"><label class="form-label">ROLE / TITLE</label><input class="form-input" id="eRole" value="\${e?e.role:''}" placeholder="e.g. Fabricator"></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployeeModal()">\${e?'Save changes':'Add employee'}</button></div></div></div>\`;
+      document.getElementById('modalContainer').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><h3>${e?'Edit employee':'Add employee'}</h3><div class="form-group"><label class="form-label">NAME</label><input class="form-input" id="eName" value="${e?e.name:''}" placeholder="Full name"></div><div class="form-group"><label class="form-label">ROLE / TITLE</label><input class="form-input" id="eRole" value="${e?e.role:''}" placeholder="e.g. Fabricator"></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployeeModal()">${e?'Save changes':'Add employee'}</button></div></div></div>`;
     }
     window.saveEmployeeModal=async function(){
       const name=document.getElementById('eName').value.trim(),role=document.getElementById('eRole').value.trim();if(!name)return;
@@ -419,16 +371,6 @@ function startFirebase() {
 
     window.closeModal=function(){document.getElementById('modalContainer').innerHTML='';};
     document.getElementById('liveClock').textContent=new Date().toLocaleTimeString();
-  `;
-  document.head.appendChild(s);
-}
-
-// Check if already authenticated this session
-if (sessionStorage.getItem('tc_auth') === '1') {
-  showApp();
-} else {
-  setTimeout(()=>document.getElementById('pwInput').focus(), 100);
-}
 </script>
 </body>
 </html>
