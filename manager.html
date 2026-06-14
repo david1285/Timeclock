@@ -21,26 +21,16 @@ body { font-family: 'DM Sans', sans-serif; background: #0f0f11; color: #e2e2e8; 
   padding: 36px 32px; width: 340px; max-width: 92vw;
   display: flex; flex-direction: column; align-items: center; gap: 20px;
 }
-.pw-logo { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: -0.3px; }
-.pw-logo span { color: #7b6ef6; }
-.pw-title { font-size: 13px; color: #555568; letter-spacing: 0.04em; margin-top: -10px; }
-.pw-input {
   width: 100%; background: #1e1e26; border: 1px solid #2a2a35; border-radius: 10px;
   color: #e2e2e8; font-family: 'DM Mono', monospace; font-size: 18px;
   padding: 12px 16px; outline: none; text-align: center; letter-spacing: 0.15em;
   transition: border-color 0.15s;
 }
-.pw-input:focus { border-color: #7b6ef6; }
-.pw-input.error { border-color: #e87d5a; animation: shake 0.3s ease; }
 @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
-.pw-btn {
   width: 100%; background: #7b6ef6; color: #fff; border: none; border-radius: 10px;
   font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600;
   padding: 12px; cursor: pointer; transition: background 0.15s;
 }
-.pw-btn:hover { background: #8f84f8; }
-.pw-error { font-size: 12px; color: #e87d5a; height: 16px; }
-
 .kb-header { background: #16161a; border-bottom: 1px solid #2a2a35; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
 .kb-logo { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; color: #fff; }
 .kb-logo span { color: #7b6ef6; }
@@ -156,24 +146,11 @@ tr:hover .row-actions { opacity: 1; }
 .dur-preview { font-family: 'DM Mono', monospace; font-size: 13px; color: #5aba8d; margin-bottom: 13px; padding: 8px 12px; background: #13131a; border-radius: 6px; border: 1px solid #222230; }
 .original-info { font-size: 11px; color: #555568; margin-bottom: 13px; }
 
-.loading-overlay { position: fixed; inset: 0; background: #0f0f11; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 200; gap: 16px; }
-.loading-spinner { width: 36px; height: 36px; border: 3px solid #2a2a35; border-top-color: #7b6ef6; border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.loading-text { font-size: 13px; color: #555568; }
 </style>
 </head>
 <body>
 
-    <div class="pw-title">Manager Dashboard</div>
-    <input class="pw-input" id="pwInput" type="password" placeholder="••••••••"
-      onkeydown="if(event.key==='Enter')checkPassword()" autocomplete="off" autocorrect="off" spellcheck="false">
-    <div class="pw-error" id="pwError"></div>
-    <button class="pw-btn" onclick="checkPassword()">Sign In</button>
-  </div>
-</div>
-
-  <div class="loading-text">Loading data…</div>
-</div>
 
 <div class="kb-header">
   <div style="display:flex;align-items:center;">
@@ -690,10 +667,7 @@ document.getElementById('asort-date').classList.add('active');
 document.getElementById('adir-desc').classList.add('active');`;
   document.head.appendChild(s);
 }
-if (sessionStorage.getItem('tc_mgr_auth') === '1') {
-  showApp();
 } else {
-  setTimeout(()=>document.getElementById('pwInput').focus(), 100);
 }
 </script>
 </body>
