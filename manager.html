@@ -311,8 +311,19 @@ function updateWeekLabel() {
   const ws=new Date(getWeekStart(viewWeekOffset)),we=new Date(getWeekEnd(viewWeekOffset)-86400000),o={month:'short',day:'numeric'};
   document.getElementById('weekLabel').textContent = viewWeekOffset===0 ? `This week — ${ws.toLocaleDateString([],o)} → ${we.toLocaleDateString([],o)}` : `${ws.toLocaleDateString([],o)} → ${we.toLocaleDateString([],o)}`;
 }
-function shiftJobWeek(d)    { jobWeekOffset+=d; if(jobWeekOffset>0)jobWeekOffset=0; updateJobWeekLabel(); renderJobTotals(); }
-function goJobCurrentWeek() { jobWeekOffset=0; updateJobWeekLabel(); renderJobTotals(); }
+function shiftJobWeek(d)    { jobWeekOffset+=d; if(jobWeekOffset>0)jobWeekOffset=0; updateJobWeekLabel(); syncJobDatePickers(); applyJobFilters(); }
+function goJobCurrentWeek() { jobWeekOffset=0; updateJobWeekLabel(); syncJobDatePickers(); applyJobFilters(); }
+
+function syncJobDatePickers() {
+  const ws = new Date(getWeekStart(jobWeekOffset));
+  const we = new Date(getWeekEnd(jobWeekOffset) - 86400000);
+  const pad = n => String(n).padStart(2,'0');
+  const toISO = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  const fromEl = document.getElementById('jDateFrom');
+  const toEl   = document.getElementById('jDateTo');
+  if (fromEl) fromEl.value = toISO(ws);
+  if (toEl)   toEl.value   = toISO(we);
+}
 function updateJobWeekLabel() {
   const ws=new Date(getWeekStart(jobWeekOffset)),we=new Date(getWeekEnd(jobWeekOffset)-86400000),o={month:'short',day:'numeric'};
   document.getElementById('jobWeekLabel').textContent = jobWeekOffset===0 ? `This week — ${ws.toLocaleDateString([],o)} → ${we.toLocaleDateString([],o)}` : `${ws.toLocaleDateString([],o)} → ${we.toLocaleDateString([],o)}`;
@@ -651,7 +662,7 @@ window.closeModal = function(){document.getElementById('modalContainer').innerHT
 setInterval(()=>{ document.getElementById('liveClock').textContent=new Date().toLocaleTimeString(); },1000);
 
 document.getElementById('liveClock').textContent=new Date().toLocaleTimeString();
-updateWeekLabel(); updateJobWeekLabel();
+updateWeekLabel(); updateJobWeekLabel(); syncJobDatePickers();
 document.getElementById('jsort-date').classList.add('active');
 document.getElementById('jdir-desc').classList.add('active');
 document.getElementById('asort-date').classList.add('active');
