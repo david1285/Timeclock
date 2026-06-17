@@ -66,8 +66,8 @@ body {
 }
 .kb-logo span { color: var(--gold-light); }
 .kb-header-right { display: flex; gap: 12px; align-items: center; }
-.live-time { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text-dim); letter-spacing: 0.06em; }
-.sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 6px; vertical-align: middle; transition: background 0.3s; }
+.live-time { display: inline-flex; align-items: center; gap: 3px; }
+.sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 6px; vertical-align: middle; transition: background 0.3s; flex-shrink: 0; }
 .sync-dot.offline { background: var(--red-alert); }
 
 .btn {
@@ -100,10 +100,10 @@ body {
 .summary-stat { padding: 10px 20px; border-right: 1px solid var(--border2); display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
 .summary-stat:first-child { padding-left: 0; }
 .stat-label { font-family: 'Cinzel', serif; font-size: 9px; color: var(--text-muted); letter-spacing: 0.12em; text-transform: uppercase; }
-.stat-val { font-family: 'DM Mono', monospace; font-size: 18px; color: var(--text); }
-.stat-val.purple { color: var(--gold); }
-.stat-val.green  { color: var(--green); }
-.stat-val.amber  { color: var(--amber); }
+.stat-val { display: inline-flex; gap: 3px; align-items: center; min-height: 44px; }
+.stat-val.purple .nixie-tube.lit { color: var(--gold); text-shadow: 0 0 4px var(--gold), 0 0 12px var(--gold-dark), 0 0 24px rgba(201,168,76,0.4); box-shadow: inset 0 0 10px rgba(201,168,76,0.2), 0 0 6px rgba(201,168,76,0.2); background: radial-gradient(ellipse at 50% 40%, #1a1200 0%, #0a0800 60%, #000 100%); }
+.stat-val.green  .nixie-tube.lit { color: var(--green); text-shadow: 0 0 4px var(--green), 0 0 12px rgba(74,154,106,0.6); box-shadow: inset 0 0 10px rgba(74,154,106,0.2), 0 0 6px rgba(74,154,106,0.2); background: radial-gradient(ellipse at 50% 40%, #001408 0%, #000a04 60%, #000 100%); }
+.stat-val.amber  .nixie-tube.lit { color: var(--amber); text-shadow: 0 0 4px var(--amber), 0 0 12px rgba(200,112,32,0.5); box-shadow: inset 0 0 10px rgba(200,112,32,0.2), 0 0 6px rgba(200,112,32,0.2); background: radial-gradient(ellipse at 50% 40%, #180a00 0%, #0a0400 60%, #000 100%); }
 
 /* ── Board ── */
 .kb-board { display: flex; gap: 16px; padding: 20px; overflow-x: auto; min-height: calc(100vh - 104px); align-items: flex-start; }
@@ -143,8 +143,12 @@ body {
 }
 .attendance-bar-inner { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .attendance-label { font-family: 'Cinzel', serif; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold-dark); font-weight: 600; flex-shrink: 0; }
-.attendance-timer { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--text-muted); letter-spacing: 0.04em; transition: color 0.3s; }
-.attendance-timer.att-running { color: var(--green); }
+.attendance-timer {
+  font-family: 'DM Mono', monospace; font-size: 13px;
+  color: var(--text-muted); letter-spacing: 0.04em; transition: color 0.3s;
+  display: inline-flex; gap: 3px; align-items: center;
+}
+.attendance-timer.att-running { color: #ff8c00; }
 .att-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(80,60,20,0.6); flex-shrink: 0; transition: background 0.3s; }
 .att-dot.att-running { background: var(--green); animation: blink 1.4s ease-in-out infinite; }
 .btn-att-in {
@@ -210,21 +214,98 @@ body {
 .card-bullets li { font-family: 'IM Fell English', serif; font-size: 12px; color: var(--text-dim); line-height: 1.4; padding-left: 16px; position: relative; }
 .card-bullets li::before { content: '❧'; position: absolute; left: 0; top: 0; font-size: 10px; color: var(--gold-dark); }
 
-/* ── Timer section ── */
+/* ── Timer section — Nixie Tube Style ── */
 .card-timer-section {
-  background: rgba(0,0,0,0.5);
+  background: #0a0400;
   border-radius: 0;
   padding: 10px 12px; margin-bottom: 12px;
-  border: 1px solid var(--border2);
-  border-left: 2px solid var(--gold-dark);
+  border: 1px solid rgba(180,80,0,0.3);
+  border-left: 2px solid rgba(180,80,0,0.5);
+  box-shadow: inset 0 0 12px rgba(0,0,0,0.8);
 }
 .timer-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.timer-display { font-family: 'DM Mono', monospace; font-size: 22px; font-weight: 500; color: var(--text-muted); letter-spacing: 0.05em; transition: color 0.3s; }
-.timer-display.running { color: var(--green); }
-.pulse-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(80,60,20,0.5); transition: background 0.3s; flex-shrink: 0; }
-.pulse-dot.running { background: var(--green); animation: blink 1.4s ease-in-out infinite; }
+
+/* Nixie tube display wrapper */
+.timer-display {
+  display: inline-flex; gap: 3px; align-items: center;
+  transition: all 0.3s;
+}
+
+/* ── Nixie tube styling ── */
+.nixie-tube {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 44px;
+  background: radial-gradient(ellipse at 50% 30%, #1a0800 0%, #0a0300 60%, #000 100%);
+  border: 1px solid rgba(160,60,0,0.5);
+  border-radius: 5px 5px 7px 7px;
+  position: relative;
+  box-shadow:
+    inset 0 0 10px rgba(0,0,0,0.95),
+    0 0 5px rgba(255,80,0,0.1);
+  overflow: hidden;
+  font-family: 'DM Mono', monospace;
+  font-size: 22px; font-weight: 400;
+  color: #3a2000;
+  letter-spacing: 0;
+}
+/* Glass tube highlight */
+.nixie-tube::before {
+  content: '';
+  position: absolute; left: 3px; top: 4px; width: 6px; bottom: 4px;
+  background: linear-gradient(180deg, rgba(255,220,120,0.08) 0%, transparent 100%);
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 2;
+}
+/* Ghost digit — other cathodes faintly visible */
+.nixie-tube::after {
+  content: attr(data-ghost);
+  position: absolute;
+  font-family: 'DM Mono', monospace;
+  font-size: 22px; font-weight: 400;
+  color: rgba(255,60,0,0.07);
+  pointer-events: none;
+  z-index: 0;
+}
+.nixie-tube.lit {
+  color: #ff8c00;
+  text-shadow:
+    0 0 3px #ff8800,
+    0 0 8px #ff5500,
+    0 0 18px rgba(255,80,0,0.7),
+    0 0 35px rgba(255,60,0,0.3);
+  box-shadow:
+    inset 0 0 12px rgba(255,60,0,0.35),
+    0 0 8px rgba(255,80,0,0.35),
+    0 0 16px rgba(255,60,0,0.15);
+  background: radial-gradient(ellipse at 50% 40%, #2a0e00 0%, #140400 60%, #000 100%);
+}
+.nixie-tube.lit::after {
+  color: rgba(255,80,0,0.12);
+}
+.nixie-sep {
+  display: inline-flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 6px; padding: 0 2px; height: 44px;
+}
+.nixie-sep-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: #2a1200;
+  transition: all 0.3s;
+}
+.nixie-sep.lit .nixie-sep-dot {
+  background: #ff5500;
+  box-shadow: 0 0 5px #ff4400, 0 0 10px rgba(255,60,0,0.5);
+  animation: nixieBlink 1s ease-in-out infinite;
+}
+@keyframes nixieBlink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
+.pulse-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(80,40,0,0.5); transition: background 0.3s; flex-shrink: 0; }
+.pulse-dot.running { background: #ff6600; box-shadow: 0 0 6px #ff4400; animation: nixieDotBlink 1.4s ease-in-out infinite; }
+@keyframes nixieDotBlink { 0%,100%{opacity:1;box-shadow:0 0 6px #ff4400}50%{opacity:.3;box-shadow:none} }
+
 .timer-meta { font-size: 11px; color: var(--text-muted); font-family: 'DM Mono', monospace; min-height: 14px; font-style: italic; }
-.timer-meta.running { color: var(--green); }
+.timer-meta.running { color: #c86000; }
 
 /* ── Card footer ── */
 .card-footer {
@@ -357,7 +438,7 @@ body {
 <div class="kb-header">
   <div class="kb-logo">Foster<span> Vintage</span> <span style="color:var(--text-muted);font-family:'IM Fell English',serif;font-style:italic;font-size:12px;font-weight:400;margin-left:8px;letter-spacing:0.02em;">— Employee Board</span></div>
   <div class="kb-header-right">
-    <div class="live-time"><span class="sync-dot" id="syncDot"></span><span id="liveClock">--:--:--</span></div>
+    <div class="live-time"><span class="sync-dot" id="syncDot"></span><div id="liveClock" style="display:inline-flex;gap:3px;align-items:center;"></div></div>
     <button class="btn btn-ghost" onclick="openAddEmployee()">+ Employee</button>
     <button class="btn btn-primary" onclick="openAddJob(null)">+ Job</button>
   </div>
@@ -522,6 +603,22 @@ window.confirmDeleteJob= confirmDeleteJob;
 window.deleteLogEntry  = deleteLogEntry;
 
 // ── Time helpers ──────────────────────────────────────────────────────
+// ── Nixie tube renderer ───────────────────────────────────────────────
+// Ghost digit pairs — each tube shows a faint "other" digit underneath
+const GHOST = ['9','8','7','6','5','4','3','2','1','0'];
+function nixie(timeStr, isLit) {
+  // timeStr = "HH:MM:SS"
+  let digitIdx = 0;
+  return timeStr.split('').map(ch => {
+    if (ch === ':') {
+      return `<span class="nixie-sep${isLit?' lit':''}"><span class="nixie-sep-dot"></span><span class="nixie-sep-dot"></span></span>`;
+    }
+    const ghost = GHOST[(parseInt(ch) + 3 + digitIdx) % 10];
+    digitIdx++;
+    return `<span class="nixie-tube${isLit?' lit':''}" data-ghost="${ghost}">${ch}</span>`;
+  }).join('');
+}
+
 function formatDur(ms) {
   const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=s%60;
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sc).padStart(2,'0')}`;
@@ -597,9 +694,9 @@ window.punchOut = function(jobId) {
       <div class="modal modal-wide">
         <h3 style="display:flex;align-items:center;gap:10px;">Clock Out
           <span style="font-size:11px;font-weight:400;color:#555568;font-family:'DM Mono',monospace;">${job?job.title:''}</span></h3>
-        <div style="background:#13131a;border:1px solid #222230;border-radius:8px;padding:10px 14px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;">
-          <span style="font-size:12px;color:#666680;">Session time</span>
-          <span style="font-family:'DM Mono',monospace;font-size:20px;color:#5aba8d;" id="clockOutTimer">${elapsed}</span>
+        <div style="background:#0a0400;border:1px solid rgba(180,80,0,0.3);padding:10px 14px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-family:'Cinzel',serif;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);">Session Time</span>
+          <div id="clockOutTimer" style="display:inline-flex;gap:2px;align-items:center;">${nixie(elapsed,true)}</div>
         </div>
         <div class="form-group">
           <label class="form-label">WORK NOTES <span style="color:#e87d5a;">*</span></label>
@@ -618,7 +715,7 @@ window.punchOut = function(jobId) {
       </div>
     </div>`;
   const timerEl=document.getElementById('clockOutTimer');
-  const tick=setInterval(()=>{if(!document.getElementById('clockOutTimer')){clearInterval(tick);return;}timerEl.textContent=formatDur(Date.now()-activeTimers[jobId].start);},1000);
+  const tick=setInterval(()=>{if(!document.getElementById('clockOutTimer')){clearInterval(tick);return;}timerEl.innerHTML=nixie(formatDur(Date.now()-activeTimers[jobId].start),true);},1000);
 };
 
 window.confirmPunchOut = async function(jobId) {
@@ -651,11 +748,11 @@ function renderStats() {
     if(isToday(t.start))    todayMs+=el;
     if(isThisWeek(t.start)) weekMs +=el;
   });
-  document.getElementById('statToday').textContent  = durHours(todayMs)+'h';
-  document.getElementById('statWeek').textContent   = durHours(weekMs)+'h';
-  document.getElementById('statActive').textContent = Object.keys(activeTimers).length;
-  document.getElementById('statAttActive').textContent = Object.keys(attendanceTimers).length;
-  document.getElementById('statEmps').textContent   = employees.length;
+  document.getElementById('statToday').innerHTML    = nixie(durHours(todayMs)+'h', true);
+  document.getElementById('statWeek').innerHTML     = nixie(durHours(weekMs)+'h', true);
+  document.getElementById('statActive').innerHTML   = nixie(String(Object.keys(activeTimers).length).padStart(2,'0'), true);
+  document.getElementById('statAttActive').innerHTML= nixie(String(Object.keys(attendanceTimers).length).padStart(2,'0'), true);
+  document.getElementById('statEmps').innerHTML     = nixie(String(employees.length).padStart(2,'0'), true);
 }
 
 // ── Weekly helpers ────────────────────────────────────────────────────
@@ -706,7 +803,7 @@ function renderBoard() {
           <span class="attendance-label">Payroll Clock</span>
           <div style="display:flex;align-items:center;gap:6px;flex:1;justify-content:center;">
             <div class="att-dot ${attRunning?'att-running':''}"></div>
-            <span class="attendance-timer ${attRunning?'att-running':''}" id="att-timer-${emp.id}">${formatDur(weekAttMs)}</span>
+            <span class="attendance-timer" id="att-timer-${emp.id}">${nixie(formatDur(weekAttMs), attRunning)}</span>
           </div>
           ${attRunning
             ? `<button class="btn-att-out ${hasRunningJob?'att-blocked':''}" onclick="attendanceOut('${emp.id}')" title="${hasRunningJob?'Clock out of job first':'Clock out for the day'}">⬛ Clock Out</button>`
@@ -746,7 +843,7 @@ function renderBoard() {
         ${(job.bullets||[]).length?`<ul class="card-bullets">${job.bullets.map(b=>`<li>${b}</li>`).join('')}</ul>`:''}
         <div class="card-timer-section">
           <div class="timer-row">
-            <div class="timer-display ${isRunning?'running':''}" id="timer-${job.id}">${isRunning?formatDur(Date.now()-activeTimers[job.id].start):formatDur(0)}</div>
+            <div class="timer-display" id="timer-${job.id}">${nixie(isRunning?formatDur(Date.now()-activeTimers[job.id].start):formatDur(0), isRunning)}</div>
             <div class="pulse-dot ${isRunning?'running':''}"></div>
           </div>
           <div class="timer-meta ${isRunning?'running':''}">${isRunning?'Clocked in at '+fmtTime(activeTimers[job.id].start):(lastEntry?'Last: '+fmtDateTime(lastEntry.start):'Not started')}</div>
@@ -774,14 +871,23 @@ function renderBoard() {
 
 // ── Live ticker ───────────────────────────────────────────────────────
 setInterval(() => {
-  Object.entries(activeTimers).forEach(([id,t])=>{const el=document.getElementById('timer-'+id);if(el)el.textContent=formatDur(Date.now()-t.start);});
+  Object.entries(activeTimers).forEach(([id,t])=>{
+    const el=document.getElementById('timer-'+id);
+    if(el) el.innerHTML=nixie(formatDur(Date.now()-t.start), true);
+  });
   const ws=getWeekStart();
   employees.forEach(emp=>{
     const el=document.getElementById('att-timer-'+emp.id);
-    if(el) el.textContent=formatDur(weeklyAttHoursForEmp(emp.id));
+    if(el) {
+      const attRunning=!!attendanceTimers[emp.id];
+      el.innerHTML=nixie(formatDur(weeklyAttHoursForEmp(emp.id)), attRunning);
+    }
   });
   renderStats();
-  document.getElementById('liveClock').textContent=new Date().toLocaleTimeString();
+  const t = new Date();
+  const ts = t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  const lc = document.getElementById('liveClock');
+  if (lc) lc.innerHTML = nixie(ts, true);
 },1000);
 
 // ── Job modal ─────────────────────────────────────────────────────────
@@ -835,6 +941,8 @@ window.saveEmployeeModal = async function() {
 
 window.closeModal = function() { document.getElementById('modalContainer').innerHTML=''; };
 
-document.getElementById('liveClock').textContent=new Date().toLocaleTimeString();
+const _t0 = new Date();
+const _ts0 = _t0.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+document.getElementById('liveClock').innerHTML = nixie(_ts0, true);
 </script>
 </html>
