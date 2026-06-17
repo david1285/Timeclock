@@ -146,9 +146,8 @@ body {
 .attendance-timer {
   font-family: 'DM Mono', monospace; font-size: 13px;
   color: var(--text-muted); letter-spacing: 0.04em; transition: color 0.3s;
-  display: inline-flex; gap: 3px; align-items: center;
 }
-.attendance-timer.att-running { color: #ff8c00; }
+.attendance-timer.att-running { color: #ffe033; }
 .att-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(80,60,20,0.6); flex-shrink: 0; transition: background 0.3s; }
 .att-dot.att-running { background: var(--green); animation: blink 1.4s ease-in-out infinite; }
 .btn-att-in {
@@ -225,87 +224,24 @@ body {
 }
 .timer-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 
-/* Nixie tube display wrapper */
+.timer-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .timer-display {
-  display: inline-flex; gap: 3px; align-items: center;
-  transition: all 0.3s;
-}
-
-/* ── Nixie tube styling ── */
-.nixie-tube {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 30px; height: 44px;
-  background: radial-gradient(ellipse at 50% 30%, #1a0800 0%, #0a0300 60%, #000 100%);
-  border: 1px solid rgba(160,60,0,0.5);
-  border-radius: 5px 5px 7px 7px;
-  position: relative;
-  box-shadow:
-    inset 0 0 10px rgba(0,0,0,0.95),
-    0 0 5px rgba(255,80,0,0.1);
-  overflow: hidden;
   font-family: 'DM Mono', monospace;
-  font-size: 22px; font-weight: 400;
+  font-size: 26px; font-weight: 500;
   color: #3a2000;
-  letter-spacing: 0;
+  letter-spacing: 0.05em;
+  transition: color 0.3s;
 }
-/* Glass tube highlight */
-.nixie-tube::before {
-  content: '';
-  position: absolute; left: 3px; top: 4px; width: 6px; bottom: 4px;
-  background: linear-gradient(180deg, rgba(255,220,120,0.08) 0%, transparent 100%);
-  border-radius: 3px;
-  pointer-events: none;
-  z-index: 2;
+.timer-display.running {
+  color: #ffe033;
+  text-shadow: 0 0 8px rgba(255,220,50,0.4);
 }
-/* Ghost digit — other cathodes faintly visible */
-.nixie-tube::after {
-  content: attr(data-ghost);
-  position: absolute;
-  font-family: 'DM Mono', monospace;
-  font-size: 22px; font-weight: 400;
-  color: rgba(255,60,0,0.07);
-  pointer-events: none;
-  z-index: 0;
-}
-.nixie-tube.lit {
-  color: #ff8c00;
-  text-shadow:
-    0 0 3px #ff8800,
-    0 0 8px #ff5500,
-    0 0 18px rgba(255,80,0,0.7),
-    0 0 35px rgba(255,60,0,0.3);
-  box-shadow:
-    inset 0 0 12px rgba(255,60,0,0.35),
-    0 0 8px rgba(255,80,0,0.35),
-    0 0 16px rgba(255,60,0,0.15);
-  background: radial-gradient(ellipse at 50% 40%, #2a0e00 0%, #140400 60%, #000 100%);
-}
-.nixie-tube.lit::after {
-  color: rgba(255,80,0,0.12);
-}
-.nixie-sep {
-  display: inline-flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  gap: 6px; padding: 0 2px; height: 44px;
-}
-.nixie-sep-dot {
-  width: 5px; height: 5px; border-radius: 50%;
-  background: #2a1200;
-  transition: all 0.3s;
-}
-.nixie-sep.lit .nixie-sep-dot {
-  background: #ff5500;
-  box-shadow: 0 0 5px #ff4400, 0 0 10px rgba(255,60,0,0.5);
-  animation: nixieBlink 1s ease-in-out infinite;
-}
-@keyframes nixieBlink { 0%,100%{opacity:1} 50%{opacity:0.25} }
-
 .pulse-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(80,40,0,0.5); transition: background 0.3s; flex-shrink: 0; }
-.pulse-dot.running { background: #ff6600; box-shadow: 0 0 6px #ff4400; animation: nixieDotBlink 1.4s ease-in-out infinite; }
-@keyframes nixieDotBlink { 0%,100%{opacity:1;box-shadow:0 0 6px #ff4400}50%{opacity:.3;box-shadow:none} }
+.pulse-dot.running { background: #ff4411; box-shadow: 0 0 6px rgba(255,60,0,0.6); animation: pulseDot 1.4s ease-in-out infinite; }
+@keyframes pulseDot { 0%,100%{opacity:1;box-shadow:0 0 6px rgba(255,60,0,0.6)}50%{opacity:.3;box-shadow:none} }
 
 .timer-meta { font-size: 11px; color: var(--text-muted); font-family: 'DM Mono', monospace; min-height: 14px; font-style: italic; }
-.timer-meta.running { color: #c86000; }
+.timer-meta.running { color: #ffaa00; }
 
 /* ── Card footer ── */
 .card-footer {
@@ -696,7 +632,7 @@ window.punchOut = function(jobId) {
           <span style="font-size:11px;font-weight:400;color:#555568;font-family:'DM Mono',monospace;">${job?job.title:''}</span></h3>
         <div style="background:#0a0400;border:1px solid rgba(180,80,0,0.3);padding:10px 14px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;">
           <span style="font-family:'Cinzel',serif;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);">Session Time</span>
-          <div id="clockOutTimer" style="display:inline-flex;gap:2px;align-items:center;">${nixie(elapsed,true)}</div>
+          <div id="clockOutTimer" style="font-family:'DM Mono',monospace;font-size:22px;color:#ffe033;">${elapsed}</div>
         </div>
         <div class="form-group">
           <label class="form-label">WORK NOTES <span style="color:#e87d5a;">*</span></label>
@@ -715,7 +651,7 @@ window.punchOut = function(jobId) {
       </div>
     </div>`;
   const timerEl=document.getElementById('clockOutTimer');
-  const tick=setInterval(()=>{if(!document.getElementById('clockOutTimer')){clearInterval(tick);return;}timerEl.innerHTML=nixie(formatDur(Date.now()-activeTimers[jobId].start),true);},1000);
+  const tick=setInterval(()=>{if(!document.getElementById('clockOutTimer')){clearInterval(tick);return;}timerEl.textContent=formatDur(Date.now()-activeTimers[jobId].start);},1000);
 };
 
 window.confirmPunchOut = async function(jobId) {
@@ -803,7 +739,7 @@ function renderBoard() {
           <span class="attendance-label">Payroll Clock</span>
           <div style="display:flex;align-items:center;gap:6px;flex:1;justify-content:center;">
             <div class="att-dot ${attRunning?'att-running':''}"></div>
-            <span class="attendance-timer" id="att-timer-${emp.id}">${nixie(formatDur(weekAttMs), attRunning)}</span>
+            <span class="attendance-timer ${attRunning?'att-running':''}" id="att-timer-${emp.id}">${formatDur(weekAttMs)}</span>
           </div>
           ${attRunning
             ? `<button class="btn-att-out ${hasRunningJob?'att-blocked':''}" onclick="attendanceOut('${emp.id}')" title="${hasRunningJob?'Clock out of job first':'Clock out for the day'}">⬛ Clock Out</button>`
@@ -843,7 +779,7 @@ function renderBoard() {
         ${(job.bullets||[]).length?`<ul class="card-bullets">${job.bullets.map(b=>`<li>${b}</li>`).join('')}</ul>`:''}
         <div class="card-timer-section">
           <div class="timer-row">
-            <div class="timer-display" id="timer-${job.id}">${nixie(isRunning?formatDur(Date.now()-activeTimers[job.id].start):formatDur(0), isRunning)}</div>
+            <div class="timer-display ${isRunning?'running':''}" id="timer-${job.id}">${isRunning?formatDur(Date.now()-activeTimers[job.id].start):formatDur(0)}</div>
             <div class="pulse-dot ${isRunning?'running':''}"></div>
           </div>
           <div class="timer-meta ${isRunning?'running':''}">${isRunning?'Clocked in at '+fmtTime(activeTimers[job.id].start):(lastEntry?'Last: '+fmtDateTime(lastEntry.start):'Not started')}</div>
@@ -873,14 +809,14 @@ function renderBoard() {
 setInterval(() => {
   Object.entries(activeTimers).forEach(([id,t])=>{
     const el=document.getElementById('timer-'+id);
-    if(el) el.innerHTML=nixie(formatDur(Date.now()-t.start), true);
+    if(el) el.textContent=formatDur(Date.now()-t.start);
   });
   const ws=getWeekStart();
   employees.forEach(emp=>{
     const el=document.getElementById('att-timer-'+emp.id);
     if(el) {
       const attRunning=!!attendanceTimers[emp.id];
-      el.innerHTML=nixie(formatDur(weeklyAttHoursForEmp(emp.id)), attRunning);
+      el.textContent=formatDur(weeklyAttHoursForEmp(emp.id));
     }
   });
   renderStats();
