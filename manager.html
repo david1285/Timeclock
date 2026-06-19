@@ -126,6 +126,31 @@ body {
 @media(max-width:1000px){ .page-body{grid-template-columns:1fr;height:auto;overflow:auto;} }
 .half-col { display: flex; flex-direction: column; overflow: hidden; }
 
+/* ── Project Hours panel ── */
+.page-body-wrapper { display: flex; flex-direction: column; height: calc(100vh - 108px); overflow: hidden; padding: 16px 20px; gap: 16px; }
+.page-body-wrapper .page-body { padding: 0; flex: 1; min-height: 0; height: auto; }
+.project-hours-panel {
+  background: var(--surface);
+  border: 1px solid var(--gold-border);
+  flex-shrink: 0;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+.project-hours-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  background: linear-gradient(180deg, rgba(80,20,0,0.5) 0%, transparent 100%);
+}
+.project-hours-body { padding: 14px 16px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+.ph-select-group { display: flex; flex-direction: column; gap: 6px; min-width: 220px; flex: 1; }
+.ph-stats-group { display: flex; gap: 24px; flex-wrap: wrap; }
+.ph-stat { display: flex; flex-direction: column; gap: 3px; }
+.ph-stat-label { font-family: 'Cinzel', serif; font-size: 9px; color: var(--text-muted); letter-spacing: 0.12em; text-transform: uppercase; }
+.ph-stat-val { font-family: 'DM Mono', monospace; font-size: 26px; font-weight: 500; color: #ffe033; }
+.ph-stat-val.total { color: var(--gold); }
+.ph-empty-msg { font-family: 'IM Fell English', serif; font-style: italic; color: var(--text-muted); font-size: 13px; }
+
 /* ── Panels ── */
 .panel {
   background: var(--surface);
@@ -272,7 +297,35 @@ tr:hover td { background: rgba(201,168,76,0.05); }
   <div class="summary-stat"><span class="stat-label">Employees</span><span class="stat-val" id="statEmps">0</span></div>
 </div>
 
-<div class="page-body">
+<div class="page-body-wrapper">
+
+  <!-- Project Hours Panel -->
+  <div class="project-hours-panel">
+    <div class="project-hours-header">
+      <div><div class="panel-title">Project Hours</div><div class="panel-subtitle">Select a project to view its totals</div></div>
+    </div>
+    <div class="project-hours-body">
+      <div class="ph-select-group">
+        <label class="form-label">PROJECT</label>
+        <select class="fi fi-select" id="phProjectSelect" onchange="renderProjectHoursStat()" style="width:100%;">
+          <option value="">— Select a project —</option>
+        </select>
+      </div>
+      <div class="ph-stats-group" id="phStatsGroup" style="display:none;">
+        <div class="ph-stat">
+          <span class="ph-stat-label">Hours This Week</span>
+          <span class="ph-stat-val" id="phWeekHours">0.00h</span>
+        </div>
+        <div class="ph-stat">
+          <span class="ph-stat-label">Total Hours</span>
+          <span class="ph-stat-val total" id="phTotalHours">0.00h</span>
+        </div>
+      </div>
+      <div class="ph-empty-msg" id="phEmptyMsg">No project selected.</div>
+    </div>
+  </div>
+
+  <div class="page-body">
   <!-- LEFT: Job Log -->
   <div class="half-col">
     <div class="panel">
@@ -350,7 +403,8 @@ tr:hover td { background: rgba(201,168,76,0.05); }
       </div>
     </div>
   </div>
-</div>
+  </div><!-- /page-body -->
+</div><!-- /page-body-wrapper -->
 
 <div id="modalContainer"></div>
 
@@ -542,7 +596,43 @@ function populateDropdowns() {
   if(jeSel)jeSel.innerHTML='<option value="">All employees</option>'+empNames.map(n=>`<option value="${esc(n)}" ${jeV===n?'selected':''}>${esc(n)}</option>`).join('');
   if(jjSel)jjSel.innerHTML='<option value="">All jobs</option>'+jobTitles.map(t=>`<option value="${esc(t)}" ${jjV===t?'selected':''}>${esc(t)}</option>`).join('');
   if(aeSel)aeSel.innerHTML='<option value="">All employees</option>'+attEmps.map(n=>`<option value="${esc(n)}" ${aeV===n?'selected':''}>${esc(n)}</option>`).join('');
+
+  // Project Hours panel dropdown — uses the same set of distinct project/job titles
+  const phSel = document.getElementById('phProjectSelect');
+  if (phSel) {
+    const phV = phSel.value;
+    phSel.innerHTML = '<option value="">— Select a project —</option>' + jobTitles.map(t=>`<option value="${esc(t)}" ${phV===t?'selected':''}>${esc(t)}</option>`).join('');
+    renderProjectHoursStat();
+  }
 }
+
+// ── Project Hours panel ─────────────────────────────────────────────────
+function renderProjectHoursStat() {
+  const sel = document.getElementById('phProjectSelect');
+  const statsGroup = document.getElementById('phStatsGroup');
+  const emptyMsg = document.getElementById('phEmptyMsg');
+  if (!sel) return;
+  const project = sel.value;
+
+  if (!project) {
+    statsGroup.style.display = 'none';
+    emptyMsg.style.display = 'block';
+    return;
+  }
+
+  const ws = getWeekStart(0);
+  const we = getWeekEnd(0);
+  const entries = logEntries.filter(e => e.jobTitle === project);
+  const weekMs  = entries.filter(e => e.start >= ws && e.start < we).reduce((s,e)=>s+e.duration,0);
+  const totalMs = entries.reduce((s,e)=>s+e.duration,0);
+
+  document.getElementById('phWeekHours').textContent  = durHours(weekMs)+'h';
+  document.getElementById('phTotalHours').textContent = durHours(totalMs)+'h';
+
+  statsGroup.style.display = 'flex';
+  emptyMsg.style.display = 'none';
+}
+window.renderProjectHoursStat = renderProjectHoursStat;
 
 // ── Job totals bar ────────────────────────────────────────────────────
 function renderJobTotals() {

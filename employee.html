@@ -339,6 +339,41 @@ body {
 }
 .form-input:focus, .form-textarea:focus, .form-select:focus { border-color: var(--gold); }
 .form-select option { background: #1a0000; }
+
+/* ── Project picker ── */
+.project-picker-box {
+  font-family: 'IM Fell English', serif; font-size: 13px;
+  background: rgba(0,0,0,0.5);
+  border: 1px solid var(--border);
+  color: var(--text); padding: 8px 12px; width: 100%;
+  cursor: pointer; transition: border-color 0.15s;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.project-picker-box:hover { border-color: var(--gold); }
+.project-picker-box .ppb-placeholder { color: var(--text-muted); font-style: italic; }
+.project-picker-box .ppb-arrow { color: var(--gold-dark); font-size: 11px; }
+
+.project-list {
+  max-height: 240px; overflow-y: auto;
+  border: 1px solid var(--border); margin-bottom: 12px;
+  background: rgba(0,0,0,0.4);
+}
+.project-list::-webkit-scrollbar { width: 4px; }
+.project-list::-webkit-scrollbar-thumb { background: var(--gold-dark); }
+.project-item {
+  font-family: 'IM Fell English', serif; font-size: 13px;
+  padding: 9px 14px; cursor: pointer;
+  border-bottom: 1px solid var(--border2);
+  color: var(--text-dim);
+  transition: all 0.12s;
+}
+.project-item:last-child { border-bottom: none; }
+.project-item:hover { background: var(--gold-dim); color: var(--gold-light); }
+.project-item.selected { background: var(--gold-dim); color: var(--gold); font-weight: 600; }
+.project-empty { padding: 20px; text-align: center; color: var(--text-muted); font-style: italic; font-size: 12px; }
+.add-project-row { display: flex; gap: 8px; }
+.add-project-row .form-input { flex: 1; }
+.add-project-row .btn { flex-shrink: 0; padding: 8px 14px; }
 .form-textarea { resize: vertical; min-height: 80px; }
 .form-textarea.error { border-color: var(--red-alert); }
 .bullets-helper { font-size: 11px; color: var(--text-muted); margin-top: 4px; font-style: italic; }
@@ -412,16 +447,18 @@ const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
 
 // ── Collections ───────────────────────────────────────────────────────
-const empCol  = collection(db, 'employees');
-const jobCol  = collection(db, 'jobs');
-const logCol  = collection(db, 'jobLog');
-const attCol  = collection(db, 'attendanceLog');
+const empCol     = collection(db, 'employees');
+const jobCol     = collection(db, 'jobs');
+const logCol     = collection(db, 'jobLog');
+const attCol     = collection(db, 'attendanceLog');
+const projectCol = collection(db, 'projects');
 
 // ── In-memory state (populated by Firestore listeners) ────────────────
 let employees     = [];
 let jobs          = [];
 let logEntries    = [];
 let attendanceLog = [];
+let projects      = []; // { id, name }
 
 // Active timers live only in memory (per-device, intentional)
 // attendanceTimers track who is currently clocked in on THIS device
@@ -437,7 +474,7 @@ let dbReady = 0; // count of listeners that have fired at least once
 
 function checkReady() {
   dbReady++;
-  if (dbReady >= 4) {
+  if (dbReady >= 5) {
     document.getElementById('loadingOverlay').style.display = 'none';
     document.getElementById('syncDot').classList.remove('offline');
     renderBoard();
@@ -465,6 +502,12 @@ onSnapshot(query(logCol, orderBy('start','desc')), snap => {
 onSnapshot(query(attCol, orderBy('start','desc')), snap => {
   attendanceLog = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   checkReady(); renderBoard(); renderStats();
+});
+
+onSnapshot(query(projectCol), snap => {
+  projects = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  projects.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  checkReady();
 });
 
 // Live attendance clock-in states (who is currently clocked in)
@@ -786,8 +829,6 @@ function renderBoard() {
           ${sessions>0?`<div style="margin-top:5px;color:#7b6ef6;font-size:11px;font-family:'DM Mono',monospace;">Total: ${durHours(logMs)}h · ${sessions} session${sessions===1?'':'s'}</div>`:''}
         </div>
         <div class="card-footer">
-          <div class="card-meta-row"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="opacity:.6;flex-shrink:0"><circle cx="8" cy="8" r="6.5" stroke="#9494aa" stroke-width="1.4"/><path d="M8 5v3.5l2 2" stroke="#9494aa" stroke-width="1.4" stroke-linecap="round"/></svg>
-            <span class="meta-label">Job ID:</span><span class="meta-val" style="font-family:'DM Mono',monospace;font-size:11px;">${job.jobCode||'—'}</span></div>
           ${job.estHours?`<div class="card-meta-row"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="opacity:.6;flex-shrink:0"><path d="M3 1v14M3 2h9l-2.5 4L12 10H3" stroke="#9494aa" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <span class="meta-label">Est.:</span><span class="meta-val" style="${isOver?'color:#e87d5a':''}">${job.estHours}h${isOver?' ⚠ over':(!isOver&&totalMs>0?' ('+Math.round(totalMs/estMs*100)+'%)':'')}</span></div>`:''}
           <div class="card-actions">
@@ -833,8 +874,14 @@ function showJobModal() {
   document.getElementById('modalContainer').innerHTML=`
     <div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
       <h3>${j?'Edit job':'New job'}</h3>
-      <div class="form-group"><label class="form-label">JOB TITLE</label><input class="form-input" id="fTitle" value="${j?j.title:''}" placeholder="Job title"></div>
-      <div class="form-group"><label class="form-label">JOB ID / CODE</label><input class="form-input" id="fCode" value="${j?j.jobCode||'':''}" placeholder="e.g. JOB-001"></div>
+      <div class="form-group">
+        <label class="form-label">PROJECT</label>
+        <div class="project-picker-box" id="projectPickerBox" onclick="openProjectPicker()">
+          <span id="projectPickerLabel">${j&&j.title?j.title:'<span class="ppb-placeholder">Select a project…</span>'}</span>
+          <span class="ppb-arrow">▾</span>
+        </div>
+        <input type="hidden" id="fTitle" value="${j?j.title:''}">
+      </div>
       <div class="form-group"><label class="form-label">DESCRIPTION BULLETS</label><textarea class="form-textarea" id="fBullets" placeholder="One bullet per line...">${j?(j.bullets||[]).join('\n'):''}</textarea><div class="bullets-helper">Each line becomes a bullet</div></div>
       <div class="form-group"><label class="form-label">ASSIGNED TO</label><select class="form-select" id="fEmp">${empOpts}</select></div>
       <div class="form-row">
@@ -844,9 +891,68 @@ function showJobModal() {
       <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveJobModal()">Save job</button></div>
     </div></div>`;}
 
+// ── Project picker ──────────────────────────────────────────────────
+window.openProjectPicker = function() {
+  const currentTitle = document.getElementById('fTitle').value;
+  document.getElementById('modalContainer').insertAdjacentHTML('beforeend', `
+    <div class="modal-overlay" id="projectPickerOverlay" onclick="if(event.target===this)closeProjectPicker()" style="z-index:110;">
+      <div class="modal">
+        <h3>Select Project</h3>
+        <div class="project-list" id="projectListBox">
+          ${renderProjectListItems(currentTitle)}
+        </div>
+        <div class="form-group">
+          <label class="form-label">ADD NEW PROJECT</label>
+          <div class="add-project-row">
+            <input class="form-input" id="newProjectName" placeholder="Project name…" onkeydown="if(event.key==='Enter')addNewProject()">
+            <button class="btn btn-primary" onclick="addNewProject()">Add</button>
+          </div>
+        </div>
+        <div class="modal-actions"><button class="btn btn-ghost" onclick="closeProjectPicker()">Close</button></div>
+      </div>
+    </div>
+  `);
+};
+
+function renderProjectListItems(currentTitle) {
+  if (!projects.length) return '<div class="project-empty">No projects yet — add one below.</div>';
+  return projects.map(p => `<div class="project-item ${p.name===currentTitle?'selected':''}" onclick="selectProject('${p.id}')">${p.name}</div>`).join('');
+}
+
+window.selectProject = function(projectId) {
+  const proj = projects.find(p => p.id === projectId);
+  if (!proj) return;
+  document.getElementById('fTitle').value = proj.name;
+  document.getElementById('projectPickerLabel').textContent = proj.name;
+  closeProjectPicker();
+};
+
+window.addNewProject = async function() {
+  const input = document.getElementById('newProjectName');
+  const name = input.value.trim();
+  if (!name) return;
+  const existing = projects.find(p => p.name.toLowerCase() === name.toLowerCase());
+  if (existing) {
+    selectProject(existing.id);
+    return;
+  }
+  const id = 'p'+Date.now();
+  await setDoc(doc(db,'projects',id), { name });
+  document.getElementById('fTitle').value = name;
+  document.getElementById('projectPickerLabel').textContent = name;
+  input.value = '';
+  closeProjectPicker();
+};
+
+window.closeProjectPicker = function() {
+  const ov = document.getElementById('projectPickerOverlay');
+  if (ov) ov.remove();
+};
+
 window.saveJobModal = async function() {
-  const title=document.getElementById('fTitle').value.trim(); if(!title)return;
-  const payload={ id:currentEditJob?currentEditJob.id:'j'+Date.now(), empId:document.getElementById('fEmp').value, title, jobCode:document.getElementById('fCode').value.trim(), bullets:document.getElementById('fBullets').value.split('\n').map(l=>l.trim()).filter(Boolean), priority:document.getElementById('fPriority').value, estHours:parseFloat(document.getElementById('fEst').value)||0 };
+  const title=document.getElementById('fTitle').value.trim();
+  if (!title) { alert('Please select a project.'); return; }
+  const payload={ id:currentEditJob?currentEditJob.id:'j'+Date.now(), empId:document.getElementById('fEmp').value, title, bullets:document.getElementById('fBullets').value.split('\n').map(l=>l.trim()).filter(Boolean), priority:document.getElementById('fPriority').value, estHours:parseFloat(document.getElementById('fEst').value)||0 };
   await saveJob(payload);
   closeModal();
 };
