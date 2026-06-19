@@ -126,9 +126,19 @@ body {
 @media(max-width:1000px){ .page-body{grid-template-columns:1fr;height:auto;overflow:auto;} }
 .half-col { display: flex; flex-direction: column; overflow: hidden; }
 
-/* ── Project Hours panel ── */
-.page-body-wrapper { display: flex; flex-direction: column; height: calc(100vh - 108px); overflow: hidden; padding: 16px 20px; gap: 16px; }
-.page-body-wrapper .page-body { padding: 0; flex: 1; min-height: 0; height: auto; }
+/* ── New two-column wrapper ── */
+.page-body-wrapper {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 16px 20px;
+  height: calc(100vh - 108px);
+  overflow: hidden;
+}
+@media(max-width:1000px){ .page-body-wrapper{grid-template-columns:1fr;height:auto;overflow:auto;} }
+
+.left-col { display: flex; flex-direction: column; gap: 16px; overflow: hidden; min-height: 0; }
+.right-col { display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
 .project-hours-panel {
   background: var(--surface);
   border: 1px solid var(--gold-border);
@@ -299,36 +309,37 @@ tr:hover td { background: rgba(201,168,76,0.05); }
 
 <div class="page-body-wrapper">
 
-  <!-- Project Hours Panel -->
-  <div class="project-hours-panel">
-    <div class="project-hours-header">
-      <div><div class="panel-title">Project Hours</div><div class="panel-subtitle">Select a project to view its totals</div></div>
-    </div>
-    <div class="project-hours-body">
-      <div class="ph-select-group">
-        <label class="form-label">PROJECT</label>
-        <select class="fi fi-select" id="phProjectSelect" onchange="renderProjectHoursStat()" style="width:100%;">
-          <option value="">— Select a project —</option>
-        </select>
-      </div>
-      <div class="ph-stats-group" id="phStatsGroup" style="display:none;">
-        <div class="ph-stat">
-          <span class="ph-stat-label">Hours This Week</span>
-          <span class="ph-stat-val" id="phWeekHours">0.00h</span>
-        </div>
-        <div class="ph-stat">
-          <span class="ph-stat-label">Total Hours</span>
-          <span class="ph-stat-val total" id="phTotalHours">0.00h</span>
-        </div>
-      </div>
-      <div class="ph-empty-msg" id="phEmptyMsg">No project selected.</div>
-    </div>
-  </div>
+  <!-- LEFT COLUMN: Project Hours + Job Time Log -->
+  <div class="left-col">
 
-  <div class="page-body">
-  <!-- LEFT: Job Log -->
-  <div class="half-col">
-    <div class="panel">
+    <!-- Project Hours Panel -->
+    <div class="project-hours-panel">
+      <div class="project-hours-header">
+        <div><div class="panel-title">Project Hours</div><div class="panel-subtitle">Select a project to view its totals</div></div>
+      </div>
+      <div class="project-hours-body">
+        <div class="ph-select-group">
+          <label class="form-label">PROJECT</label>
+          <select class="fi fi-select" id="phProjectSelect" onchange="renderProjectHoursStat()" style="width:100%;">
+            <option value="">— Select a project —</option>
+          </select>
+        </div>
+        <div class="ph-stats-group" id="phStatsGroup" style="display:none;">
+          <div class="ph-stat">
+            <span class="ph-stat-label">Hours This Week</span>
+            <span class="ph-stat-val" id="phWeekHours">0.00h</span>
+          </div>
+          <div class="ph-stat">
+            <span class="ph-stat-label">Total Hours</span>
+            <span class="ph-stat-val total" id="phTotalHours">0.00h</span>
+          </div>
+        </div>
+        <div class="ph-empty-msg" id="phEmptyMsg">No project selected.</div>
+      </div>
+    </div>
+
+    <!-- Job Time Log -->
+    <div class="panel" style="flex:1;min-height:0;">
       <div class="panel-header">
         <div><div class="panel-title">Job Time Log</div><div class="panel-subtitle">All recorded job sessions</div></div>
         <span class="panel-count" id="jobCountBadge">0 entries</span>
@@ -365,10 +376,11 @@ tr:hover td { background: rgba(201,168,76,0.05); }
         <div id="jobEmpty" class="empty-table" style="display:none;">No entries match your filters.</div>
       </div>
     </div>
-  </div>
 
-  <!-- RIGHT: Attendance Log -->
-  <div class="half-col">
+  </div><!-- /left-col -->
+
+  <!-- RIGHT COLUMN: Attendance Log -->
+  <div class="right-col">
     <div class="panel">
       <div class="panel-header">
         <div><div class="panel-title">Attendance Log</div><div class="panel-subtitle">Daily clock in / out</div></div>
@@ -401,8 +413,8 @@ tr:hover td { background: rgba(201,168,76,0.05); }
         <div id="attEmpty" class="empty-table" style="display:none;">No attendance entries for this week.</div>
       </div>
     </div>
-  </div>
-  </div><!-- /page-body -->
+  </div><!-- /right-col -->
+
 </div><!-- /page-body-wrapper -->
 
 <div id="modalContainer"></div>
